@@ -533,9 +533,28 @@ function genDigest(){
     out+="Planned: "+planned.length+"  Completed: "+done.length+"  Outstanding: "+pend.length+"\n";
     if(done.length){out+="\nCompleted:\n";done.forEach(function(j){out+="  * "+j+"\n";});}
     if(pend.length){out+="\nOutstanding:\n";pend.forEach(function(j){out+="  * "+j+"\n";});}
-    if(!planned.length)out+="  No jobs scheduled.\n";
+    if(!planned.length)out+="  No jobs scheduled on this date.\n";
     out+="\n";
   });
+  // Show reports submitted on this date
+  var dayRpts=loadRpts().filter(function(r){
+    return r.date===dt;
+  });
+  if(tc!=="ALL") dayRpts=dayRpts.filter(function(r){return r.techKey===tc;});
+  if(dayRpts.length){
+    out+="REPORTS SUBMITTED\n"+"-".repeat(30)+"\n";
+    dayRpts.forEach(function(r){
+      out+="  * "+r.reportNo+" - "+(r.customer||"Unknown")+" - "+(r.techName||"")+(r.signatureData?" [SIGNED]":"")+"\n";
+      if(r.areas&&r.areas.length){
+        r.areas.forEach(function(a){
+          if(a.material&&a.material!=="Select material"&&a.qty){
+            out+="    - "+(a.material)+" "+a.qty+" "+a.unit+"\n";
+          }
+        });
+      }
+    });
+    out+="\n";
+  }
   out+="=".repeat(46)+"\nGenerated: "+new Date().toLocaleString("en-ZA");
   g("dout").textContent=out;
 }
@@ -548,15 +567,23 @@ function cpDigest(){
 var reconSt={};
 function getR(code){if(!reconSt[code])reconSt[code]={opening:0,purchases:0,issues:0,usage:0,actual:0};return reconSt[code];}
 
+function matKW(s){
+  var words=s.toLowerCase().replace(/\(.*?\)/g,"").split(/\s+/);
+  return words.filter(function(w){return w.length>3 && w!=="with" && w!=="from" && w!=="blox";});
+}
 function updateReconFromRpt(data){
   var all=[].concat(data.areas||[]).concat(data.devices||[]);
   all.forEach(function(row){
     var mat=(row.material||"").trim();
     var qty=parseFloat(row.qty||row.qty_used||0)||0;
-    if(!mat||mat==="Select material"||!qty)return;
+    if(!mat||mat==="Select material"||mat==="Select category"||qty===null||qty===undefined||qty==="")return;
+    var matKws=matKW(mat);
     RECON_ITEMS.forEach(function(item){
-      if(item[1].toLowerCase().indexOf(mat.toLowerCase().substring(0,12))>=0||
-         mat.toLowerCase().indexOf(item[1].toLowerCase().substring(0,12))>=0){
+      var itemKws=matKW(item[1]);
+      // match if any keyword from mat appears in item name or vice versa
+      var matched=matKws.some(function(k){return itemKws.indexOf(k)>=0;}) ||
+                  itemKws.some(function(k){return matKws.indexOf(k)>=0;});
+      if(matched){
         getR(item[0]).usage=(getR(item[0]).usage||0)+qty;
       }
     });
@@ -567,7 +594,10 @@ function syncReconFromAll(){
   RECON_ITEMS.forEach(function(item){if(reconSt[item[0]])reconSt[item[0]].usage=0;});
   loadRpts().forEach(function(d){updateReconFromRpt(d);});
   renderRecon();
-  alert("Usage synced from "+loadRpts().length+" reports");
+  var rpts2=loadRpts();
+  var usageFound=0;
+  RECON_ITEMS.forEach(function(item){usageFound+=(getR(item[0]).usage||0);});
+  alert("Synced from "+rpts2.length+" report(s).\nTotal usage recorded: "+usageFound+" units.\nIf 0, check that qty was entered on the service report (not left blank).");
 }
 
 function renderRecon(){
