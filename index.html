@@ -697,7 +697,25 @@ function dlPDF(rno){
 }
 
 /* ── INIT ── */
+function migrateStorage(){
+  // Migrate reports from any previous key into current "org_rpts" key
+  var current=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  var changed=false;
+  // Check all old keys used in previous versions
+  ["organic_reports","org_reports","orgReports"].forEach(function(oldKey){
+    try{
+      var old=JSON.parse(localStorage.getItem(oldKey)||"{}");
+      Object.keys(old).forEach(function(k){
+        if(!current[k]){current[k]=old[k];changed=true;}
+      });
+      if(Object.keys(old).length>0) localStorage.removeItem(oldKey);
+    }catch(e){}
+  });
+  if(changed) localStorage.setItem("org_rpts",JSON.stringify(current));
+}
+
 function init(){
+  migrateStorage();
   g("rno").textContent=rNo;
   g("svcd").valueAsDate=new Date();
 
