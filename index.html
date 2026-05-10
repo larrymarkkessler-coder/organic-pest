@@ -736,6 +736,22 @@ function dlPDF(rno){
 function processSheetReports(res){
   // Called by JSONP response from Google Sheets
   try{
+    // Show diagnostic
+    var msg = "Sheets response:\n";
+    msg += "Status: " + res.status + "\n";
+    msg += "Reports count: " + (res.reports ? res.reports.length : "none") + "\n";
+    if(res.reports && res.reports.length > 0){
+      var r0 = res.reports[0];
+      msg += "\nFirst report:\n";
+      msg += "  Report No: " + r0["Report No"] + "\n";
+      msg += "  Date: " + r0["Date"] + "\n";
+      msg += "  Customer: " + r0["Customer"] + "\n";
+      msg += "  Technician: " + r0["Technician"] + "\n";
+      msg += "  PCO Reg: " + r0["PCO Reg"] + "\n";
+      msg += "  Signed: " + r0["Signed"] + "\n";
+    }
+    alert(msg);
+  try{
     if(res.status==="ok" && res.reports && res.reports.length){
       var local=JSON.parse(localStorage.getItem("org_rpts")||"{}");
       var added=0;
