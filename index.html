@@ -207,7 +207,8 @@ var LOGO="iVBORw0KGgoAAAANSUhEUgAAASwAAABPCAYAAABRavg1AACQsUlEQVR42uy9d7hlR3Xm/V
 ═══════════════════════════════════════ */
 
 var selC=null,sigD=null,drw=false,hMk=false,sigCanvas,sigCtx;
-var curTech=TKEYS[0],jobSt={};
+var curTech=TKEYS[0];
+var jobSt=JSON.parse(localStorage.getItem("org_jobst")||"{}");
 
 function genNo(){return "ORG-"+String(Date.now()%100000).padStart(5,"0");}
 var rNo=genNo();
@@ -220,7 +221,11 @@ function sw(id,btn){
   document.querySelectorAll(".navbtn").forEach(function(b){b.classList.remove("active");});
   g("panel-"+id).classList.add("active");
   btn.classList.add("active");
-  if(id==="planner"){rTechTabs();rPlanner();updStats();}
+  if(id==="planner"){
+    // Replay all saved reports to rebuild auto-ticks
+    loadRpts().forEach(function(r){markPlannerDone(r);});
+    rTechTabs();rPlanner();updStats();
+  }
   if(id==="digest"){g("ddate").valueAsDate=new Date();}
   if(id==="recon"){renderRecon();}
 }
@@ -438,7 +443,7 @@ function markPlannerDone(data){
   (tp[mk]||[]).forEach(function(job){
     if(job.toLowerCase().indexOf(cn.substring(0,8))>=0||cn.indexOf(job.toLowerCase().substring(0,8))>=0){
       var k=jk(data.techKey,mk,job);
-      if(!jobSt[k]||jobSt[k]==="pend")jobSt[k]="auto";
+      if(!jobSt[k]||jobSt[k]==="pend"){jobSt[k]="auto";localStorage.setItem("org_jobst",JSON.stringify(jobSt));}
     }
   });
 }
@@ -467,6 +472,7 @@ function rPlanner(){
           p.addEventListener("click",function(){
             var cur=jobSt[k]||"pend";
             jobSt[k]=cur==="pend"?"done":"pend";
+            localStorage.setItem("org_jobst",JSON.stringify(jobSt));
             rPlanner();updStats();
           });
           c.appendChild(p);
@@ -749,6 +755,8 @@ function init(){
   initSig();
   addArea();addArea();
   rfRpts();
+  // Replay all reports to restore planner ticks
+  loadRpts().forEach(function(r){markPlannerDone(r);});
   rTechTabs();
   updStats();
 }
