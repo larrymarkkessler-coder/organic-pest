@@ -733,56 +733,65 @@ function dlPDF(rno){
 }
 
 /* ── INIT ── */
-function syncFromSheets(){
-  // Load reports from Google Sheets into local memory on startup
-  // This makes the platform work on any device
+function processSheetReports(res){
+  // Called by JSONP response from Google Sheets
   try{
-    fetch(GAS_URL+"?action=getReports", {mode:"cors"})
-      .then(function(r){return r.json();})
-      .then(function(res){
-        if(res.status==="ok" && res.reports && res.reports.length){
-          var local=JSON.parse(localStorage.getItem("org_rpts")||"{}");
-          var added=0;
-          res.reports.forEach(function(r){
-            var rno=r["Report No"];
-            if(rno && !local[rno]){
-              // Reconstruct minimal report object from sheet row
-              local[rno]={
-                reportNo:rno,
-                date:r["Date"]||"",
-                submittedAt:r["Submitted At"]||"",
-                customer:r["Customer"]||"",
-                address:r["Address"]||"",
-                zone:r["Zone"]||"",
-                techName:r["Technician"]||"",
-                pcoReg:r["PCO Reg"]||"",
-                techKey:Object.keys(TKEYS_MAP).reduce(function(acc,k){return TKEYS_MAP[k]===r["PCO Reg"]?TKEYS_MAP[k]:acc;},""),
-                serviceDescription:r["Service Description"]||"",
-                serviceFrequency:r["Service Frequency"]||"",
-                purposes:(r["Purposes"]||"").split(", ").filter(Boolean),
-                signatureData:r["Signed"]==="YES"?"data:synced":"",
-                areas:[],devices:[],
-                recStructural:"",recStorage:"",recSanitation:"",
-                cash:"",followUp:r["Follow Up"]||""
-              };
-              // Parse techKey from techName
-              Object.keys(TKEYS_MAP).forEach(function(reg){
-                if(r["Technician"]===TD[reg]) local[rno].techKey=TKEYS_MAP[reg];
-              });
-              added++;
-            }
+    if(res.status==="ok" && res.reports && res.reports.length){
+      var local=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+      var added=0;
+      res.reports.forEach(function(r){
+        var rno=r["Report No"];
+        if(!rno)return;
+        if(!local[rno]){
+          var techKey="";
+          Object.keys(TD).forEach(function(reg){
+            if(TD[reg]===r["Technician"])techKey=TKEYS_MAP[reg]||"";
           });
-          if(added>0){
-            localStorage.setItem("org_rpts",JSON.stringify(local));
-            rfRpts();
-            loadRpts().forEach(function(r){markPlannerDone(r);});
-            rTechTabs();updStats();
-            console.log("Synced "+added+" reports from Google Sheets");
-          }
+          local[rno]={
+            reportNo:rno,
+            date:String(r["Date"]||"").substring(0,10),
+            submittedAt:r["Submitted At"]||new Date().toISOString(),
+            customer:r["Customer"]||"",
+            address:r["Address"]||"",
+            zone:r["Zone"]||"",
+            techName:r["Technician"]||"",
+            pcoReg:r["PCO Reg"]||"",
+            techKey:techKey,
+            serviceDescription:r["Service Description"]||"",
+            serviceFrequency:r["Service Frequency"]||"",
+            purposes:(r["Purposes"]||"").split(", ").filter(Boolean),
+            signatureData:r["Signed"]==="YES"?"data:synced":"",
+            areas:[],devices:[],
+            recStructural:"",recStorage:"",recSanitation:"",
+            cash:"",followUp:r["Follow Up"]||""
+          };
+          added++;
         }
-      })
-      .catch(function(e){console.log("Sheets sync read failed:",e.message);});
-  }catch(e){console.log("Sheets sync skipped:",e.message);}
+      });
+      if(added>0){
+        localStorage.setItem("org_rpts",JSON.stringify(local));
+        rfRpts();
+        loadRpts().forEach(function(rpt){markPlannerDone(rpt);});
+        rTechTabs();updStats();
+        console.log("Synced "+added+" new reports from Google Sheets");
+      }
+    }
+  }catch(e){console.log("processSheetReports error:",e.message);}
+}
+
+function syncFromSheets(){
+  // Use JSONP to bypass CORS - injects a script tag that calls processSheetReports()
+  try{
+    var cbName="processSheetReports";
+    var script=document.createElement("script");
+    script.src=GAS_URL+"?action=getReports&callback="+cbName+"&t="+Date.now();
+    script.onerror=function(){console.log("Sheets sync script load failed");};
+    document.head.appendChild(script);
+    // Clean up script tag after 10 seconds
+    setTimeout(function(){
+      if(script.parentNode)script.parentNode.removeChild(script);
+    },10000);
+  }catch(e){console.log("syncFromSheets error:",e.message);}
 }
 
 function migrateStorage(){
