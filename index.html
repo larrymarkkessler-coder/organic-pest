@@ -733,6 +733,58 @@ function dlPDF(rno){
 }
 
 /* ── INIT ── */
+function syncFromSheets(){
+  // Load reports from Google Sheets into local memory on startup
+  // This makes the platform work on any device
+  try{
+    fetch(GAS_URL+"?action=getReports", {mode:"cors"})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res.status==="ok" && res.reports && res.reports.length){
+          var local=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+          var added=0;
+          res.reports.forEach(function(r){
+            var rno=r["Report No"];
+            if(rno && !local[rno]){
+              // Reconstruct minimal report object from sheet row
+              local[rno]={
+                reportNo:rno,
+                date:r["Date"]||"",
+                submittedAt:r["Submitted At"]||"",
+                customer:r["Customer"]||"",
+                address:r["Address"]||"",
+                zone:r["Zone"]||"",
+                techName:r["Technician"]||"",
+                pcoReg:r["PCO Reg"]||"",
+                techKey:Object.keys(TKEYS_MAP).reduce(function(acc,k){return TKEYS_MAP[k]===r["PCO Reg"]?TKEYS_MAP[k]:acc;},""),
+                serviceDescription:r["Service Description"]||"",
+                serviceFrequency:r["Service Frequency"]||"",
+                purposes:(r["Purposes"]||"").split(", ").filter(Boolean),
+                signatureData:r["Signed"]==="YES"?"data:synced":"",
+                areas:[],devices:[],
+                recStructural:"",recStorage:"",recSanitation:"",
+                cash:"",followUp:r["Follow Up"]||""
+              };
+              // Parse techKey from techName
+              Object.keys(TKEYS_MAP).forEach(function(reg){
+                if(r["Technician"]===TD[reg]) local[rno].techKey=TKEYS_MAP[reg];
+              });
+              added++;
+            }
+          });
+          if(added>0){
+            localStorage.setItem("org_rpts",JSON.stringify(local));
+            rfRpts();
+            loadRpts().forEach(function(r){markPlannerDone(r);});
+            rTechTabs();updStats();
+            console.log("Synced "+added+" reports from Google Sheets");
+          }
+        }
+      })
+      .catch(function(e){console.log("Sheets sync read failed:",e.message);});
+  }catch(e){console.log("Sheets sync skipped:",e.message);}
+}
+
 function migrateStorage(){
   // Migrate reports from any previous key into current "org_rpts" key
   var current=JSON.parse(localStorage.getItem("org_rpts")||"{}");
@@ -780,6 +832,8 @@ function init(){
   loadRpts().forEach(function(r){markPlannerDone(r);});
   rTechTabs();
   updStats();
+  // Pull reports from Google Sheets on startup
+  setTimeout(syncFromSheets, 1000);
 }
 
 window.addEventListener("load",init);
