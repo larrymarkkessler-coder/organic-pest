@@ -108,7 +108,7 @@ td select{padding-right:14px}
 </div>
 <span style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.2);padding:3px 7px;border-radius:5px" id="rno">--</span>
 </div></div>
-<div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span style="color:#2ecc71">&#9729;</span> Google Sheets sync active</div>
+<div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span style="color:#2ecc71">&#9729;</span> Google Sheets sync active &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Refresh</span></div>
 <div id="panel-form" class="panel active">
 <details class="card" style="margin-bottom:8px">
 <summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary>
@@ -749,7 +749,19 @@ function processSheetReports(res){
           });
           local[rno]={
             reportNo:rno,
-            date:String(r["Date"]||"").substring(0,10),
+            date:(function(d){
+              if(!d)return "";
+              var s=String(d);
+              // Handle ISO format 2026-05-11
+              if(s.match(/^\d{4}-\d{2}-\d{2}/))return s.substring(0,10);
+              // Handle DD/MM/YYYY
+              if(s.match(/^\d{2}\/\d{2}\/\d{4}/)){
+                var p=s.split("/");return p[2]+"-"+p[1]+"-"+p[0];
+              }
+              // Try parsing as date
+              try{var dt=new Date(d);if(!isNaN(dt))return dt.toISOString().substring(0,10);}catch(e){}
+              return s.substring(0,10);
+            })(r["Date"]),
             submittedAt:r["Submitted At"]||new Date().toISOString(),
             customer:r["Customer"]||"",
             address:r["Address"]||"",
@@ -768,12 +780,15 @@ function processSheetReports(res){
           added++;
         }
       });
+      // Always update UI with all reports (including existing ones)
+      localStorage.setItem("org_rpts",JSON.stringify(local));
+      rfRpts();
+      loadRpts().forEach(function(rpt){markPlannerDone(rpt);});
+      rTechTabs();updStats();
       if(added>0){
-        localStorage.setItem("org_rpts",JSON.stringify(local));
-        rfRpts();
-        loadRpts().forEach(function(rpt){markPlannerDone(rpt);});
-        rTechTabs();updStats();
         console.log("Synced "+added+" new reports from Google Sheets");
+      } else {
+        console.log("All Sheets reports already in local storage");
       }
     }
   }catch(e){console.log("processSheetReports error:",e.message);}
