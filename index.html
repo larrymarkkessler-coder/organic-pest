@@ -610,23 +610,50 @@ function updateReconFromRpt(data){
   var all=[].concat(data.areas||[]).concat(data.devices||[]);
   all.forEach(function(row){
     var mat=(row.material||"").trim();
-    var qty=parseFloat(row.qty||row.qty_used||0)||0;
-    if(!mat||mat==="Select material"||mat==="Select category"||qty===0)return;
+    var qtyRaw=row.qty||row.qty_used||"";
+    var qty=parseFloat(qtyRaw)||0;
+    // Skip if no material selected
+    if(!mat||mat==="Select material"||mat==="Select category")return;
+    // Skip if qty is genuinely empty/zero AND not entered
+    if(qtyRaw===""||qtyRaw===null||qtyRaw===undefined)return;
     var matKws=matKW(mat);
+    if(matKws.length===0)return;
     RECON_ITEMS.forEach(function(item){
       var itemKws=matKW(item[1]);
-      var matched=matKws.some(function(k){return itemKws.indexOf(k)>=0;})||itemKws.some(function(k){return matKws.indexOf(k)>=0;});
-      if(matched)getR(item[0]).usage=(getR(item[0]).usage||0)+qty;
+      var matched=matKws.some(function(k){return itemKws.indexOf(k)>=0;})||
+                  itemKws.some(function(k){return matKws.indexOf(k)>=0;});
+      if(matched){
+        getR(item[0]).usage=(getR(item[0]).usage||0)+(qty||1);
+      }
     });
   });
 }
 
 function syncReconFromAll(){
+  // Reset all usage counts
   RECON_ITEMS.forEach(function(item){if(reconSt[item[0]])reconSt[item[0]].usage=0;});
   var rpts=loadRpts();
-  rpts.forEach(function(d){updateReconFromRpt(d);});
+  var materialsFound=[];
+  rpts.forEach(function(d){
+    var all=[].concat(d.areas||[]).concat(d.devices||[]);
+    all.forEach(function(row){
+      var mat=(row.material||"").trim();
+      var qty=row.qty||row.qty_used||"";
+      if(mat&&mat!=="Select material"&&mat!=="Select category"&&qty!==""){
+        materialsFound.push(mat+" x"+(qty||"?"));
+      }
+    });
+    updateReconFromRpt(d);
+  });
   renderRecon();
-  alert("Synced from "+rpts.length+" report(s).");
+  var totalUsage=0;
+  RECON_ITEMS.forEach(function(item){totalUsage+=(getR(item[0]).usage||0);});
+  var msg="Synced from "+rpts.length+" report(s).
+";
+  msg+="Materials found in reports: "+(materialsFound.length?materialsFound.join(", "):"NONE")+"
+";
+  msg+="Total usage units recorded: "+totalUsage;
+  alert(msg);
 }
 
 function renderRecon(){
