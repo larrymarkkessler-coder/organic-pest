@@ -292,8 +292,12 @@ function saveRpt(d){
   localStorage.setItem("org_rpts",JSON.stringify(a));
   try{
     var p=JSON.parse(JSON.stringify(d));p.signatureData=d.signatureData?"SIGNED":"UNSIGNED";
-    fetch(GAS_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"saveReport",data:p})});
+    // Use form-encoded data instead of JSON - bypasses CORS preflight
+    var formData=new FormData();
+    formData.append("payload",JSON.stringify({action:"saveReport",data:p}));
+    fetch(GAS_URL,{method:"POST",body:formData})
+      .then(function(r){console.log("Sheets sync OK");})
+      .catch(function(e){console.log("Sheets sync failed:",e.message);});
   }catch(e){console.log("Sheets sync skipped:",e.message);}
 }
 
