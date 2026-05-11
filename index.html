@@ -319,14 +319,20 @@ function processSheetData(res){
     // Parse date using local components to avoid UTC timezone bug
     var dateStr="";var d=r["Date"];
     if(d){
-      var s=String(d);
-      if(s.match(/^\d{4}-\d{2}-\d{2}/)){dateStr=s.substring(0,10);}
-      else if(s.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)){
-        var p=s.split("/");dateStr=p[2]+"-"+p[0].padStart(2,"0")+"-"+p[1].padStart(2,"0");
+      var s=String(d).trim();
+      if(s.match(/^\d{4}-\d{2}-\d{2}/)){
+        // ISO format: 2026-05-11
+        dateStr=s.substring(0,10);
+      } else if(s.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)){
+        var p=s.split("/");
+        // South African format DD/MM/YYYY
+        // p[0]=day, p[1]=month, p[2]=year
+        dateStr=p[2]+"-"+p[1].padStart(2,"0")+"-"+p[0].padStart(2,"0");
+      } else {
+        try{var dt=new Date(d);if(!isNaN(dt)){
+          dateStr=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+        }}catch(e){}
       }
-      else{try{var dt=new Date(d);if(!isNaN(dt)){
-        dateStr=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
-      }}catch(e){}}
     }
     if(!local[rno]){
       local[rno]={reportNo:rno,date:dateStr,submittedAt:r["Submitted At"]||"",
@@ -350,21 +356,28 @@ function processSheetData(res){
 function parseCSV(text){
   var lines=text.split("\n");
   if(lines.length<2)return[];
-  var headers=lines[0].split(",").map(function(h){return h.replace(/^"|"$/g,"").trim();});
-  var rows=[];
-  for(var i=1;i<lines.length;i++){
-    if(!lines[i].trim())continue;
+  // Detect delimiter - tab or comma
+  var delim=lines[0].indexOf("\t")>=0?"\t":",";
+  function splitLine(line){
+    if(delim==="\t")return line.split("\t").map(function(c){return c.replace(/^"|"$/g,"").trim();});
     var cols=[];var cur="";var inQ=false;
-    for(var j=0;j<lines[i].length;j++){
-      var c=lines[i][j];
+    for(var j=0;j<line.length;j++){
+      var c=line[j];
       if(c==='"'){inQ=!inQ;}
       else if(c===","&&!inQ){cols.push(cur.trim());cur="";}
       else cur+=c;
     }
     cols.push(cur.trim());
+    return cols;
+  }
+  var headers=splitLine(lines[0]);
+  var rows=[];
+  for(var i=1;i<lines.length;i++){
+    if(!lines[i].trim())continue;
+    var cols=splitLine(lines[i]);
     var obj={};
     headers.forEach(function(h,k){obj[h]=cols[k]||"";});
-    rows.push(obj);
+    if(obj["Report No"])rows.push(obj);
   }
   return rows;
 }
