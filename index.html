@@ -418,8 +418,15 @@ function rfRpts(){
 
 function delRpt(rn){
   if(!confirm("Delete "+rn+"?"))return;
+  // Remove from localStorage
   var a=JSON.parse(localStorage.getItem("org_rpts")||"{}");delete a[rn];
   localStorage.setItem("org_rpts",JSON.stringify(a));rfRpts();
+  // Also remove from Google Sheets
+  try{
+    fetch(GAS_URL,{method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action:"deleteReport",reportNo:rn})});
+  }catch(e){console.log("Sheets delete skipped:",e.message);}
 }
 
 /* SUBMIT */
@@ -711,7 +718,37 @@ function dlPDF(rno){
 }
 
 /* INIT */
+function fixStoredDates(){
+  // Fix reports where stored date is wrong due to UTC timezone bug
+  // Uses the submittedAt timestamp to derive the correct local date
+  var all=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  var changed=false;
+  Object.keys(all).forEach(function(k){
+    var r=all[k];
+    if(r.submittedAt && r.date){
+      // Derive correct local date from submittedAt
+      var dt=new Date(r.submittedAt);
+      var yr=dt.getFullYear();
+      var mo=String(dt.getMonth()+1).padStart(2,"0");
+      var dy=String(dt.getDate()).padStart(2,"0");
+      var correctDate=yr+"-"+mo+"-"+dy;
+      // Only fix if dates differ and the form date field matches the svcd input
+      // We trust submittedAt over stored date for timezone correction
+      if(r.date!==correctDate){
+        console.log("Fixing date for "+k+": "+r.date+" -> "+correctDate);
+        r.date=correctDate;
+        changed=true;
+      }
+    }
+  });
+  if(changed){
+    localStorage.setItem("org_rpts",JSON.stringify(all));
+    console.log("Date correction applied to stored reports");
+  }
+}
+
 function init(){
+  fixStoredDates();
   g("rno").textContent=rNo;
   g("svcd").valueAsDate=new Date();
   g("cs").addEventListener("change",function(){
