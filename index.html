@@ -3063,10 +3063,7 @@ function collectEquip(){
   return items;
 }
 
-function init(){
-  isMobile=(window.innerWidth<768);
-  g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
-  function onPlannerSelect(sel){
+function onPlannerSelect(sel){
   var plannerName=sel.value;
   if(!plannerName)return;
   var legalName=(typeof PLAN_MAP!=="undefined")?PLAN_MAP[plannerName]:"";
@@ -3091,6 +3088,10 @@ function init(){
   }
 }
 
+function init(){
+  isMobile=(window.innerWidth<768);
+  g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
+  
 g("cs").addEventListener("change",function(){
     var val=this.value;
     // Populate site dropdown
