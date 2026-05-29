@@ -2527,7 +2527,7 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   fR([["Cash collected",data.cash||"",0.4],["Action reports outstanding",data.actionReports||"",0.6]]);
   fR([["Follow-up required",data.followUp,0.22],["Anticipated date",data.followUpDate,0.25],["Technician",data.techName,0.30],["PCO Reg No.",data.pcoReg,0.23]]);
   fR([["Contact email",data.custEmail||"",0.65],["Contact cell",data.custCell||"",0.35]]);
-  var sh=16,sy=y;
+  var sh=32,sy=y;
   doc.setFillColor(GL[0],GL[1],GL[2]);doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);doc.rect(M,sy,CW*0.48,sh,"FD");
   doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text("CUSTOMER NAME",M+1.5,sy+4);
   doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text(data.custConfirm||"",M+1.5,sy+sh-4);
@@ -3070,7 +3070,17 @@ function init(){
   var plannerName=sel.value;
   if(!plannerName)return;
   var legalName=(typeof PLAN_MAP!=="undefined")?PLAN_MAP[plannerName]:"";
-  if(!legalName)return;
+  if(!legalName){
+    // No PLAN_MAP match - use planner name directly as customer display
+    var csSel2=g("cs");
+    if(csSel2){
+      for(var i=0;i<csSel2.options.length;i++){
+        if(csSel2.options[i].value==="NEW"){csSel2.selectedIndex=i;var ev2=new Event("change");csSel2.dispatchEvent(ev2);break;}
+      }
+    }
+    setTimeout(function(){var newCustFld=g("new-cust-name");if(newCustFld){newCustFld.value=plannerName;}},100);
+    return;
+  }
   var csSel=g("cs");
   if(!csSel)return;
   for(var i=0;i<csSel.options.length;i++){
