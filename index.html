@@ -2655,11 +2655,13 @@ function loadPlannerFromSheets(){
           }
           if(dateVal)sheetJobs.push({date:dateVal,techKey:techKey,techName:techName,customer:customer,notes:notes});
         }
-        if(sheetJobs.length>0){
+        if(sheetJobs.length>plannerJobs.length){
           plannerJobs=sheetJobs;
           loadRpts().forEach(function(r){markPlannerDoneNew(r);});
           buildTechFilters();renderCalendar();updStats();
           console.log("Planner updated from Sheets: "+plannerJobs.length+" jobs");
+        } else {
+          console.log("Sheets returned "+sheetJobs.length+" jobs, keeping local "+plannerJobs.length);
         }
       })
       .catch(function(e){console.log("Sheets planner fetch failed (using local):",e.message);});
