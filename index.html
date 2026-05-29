@@ -2627,38 +2627,44 @@ var techFilter="ALL";
 var addingToDate=null;
 
 function loadPlannerFromSheets(){
-  var csvUrl="https://docs.google.com/spreadsheets/d/1nEtOzB9Z4ZZQfBoNLI5nt5xlZAiPIXpWJlNF-6PxCIo/gviz/tq?tqx=out:csv&sheet=Planner&t="+Date.now();
-  fetch(csvUrl).then(function(r){return r.text();})
-    .then(function(text){
-      var lines=text.split("\n");if(lines.length<2){buildPlannerFromLocal();return;}
-      var delim=lines[0].indexOf("\t")>=0?"\t":",";      function splitLine(line){
-        if(delim==="\t")return line.split("\t").map(function(c){return c.replace(/^"|"$/g,"").trim();});
-        var cols=[];var cur="";var inQ=false;
-        for(var j=0;j<line.length;j++){var c=line[j];if(c==='"'){inQ=!inQ;}else if(c===","&&!inQ){cols.push(cur.trim());cur="";}else cur+=c;}
-        cols.push(cur.trim());return cols;
-      }
-      var headers=splitLine(lines[0]);plannerJobs=[];
-      // Check if headers look valid; if not, use col index fallback (0=Date,1=TechKey,2=TechName,3=Customer,4=Notes)
-      var useIdx=headers[0].toLowerCase().indexOf("date")<0;
-      for(var i=1;i<lines.length;i++){
-        if(!lines[i].trim())continue;var cols=splitLine(lines[i]);
-        var dateVal,techKey,techName,customer,notes;
-        if(useIdx){
-          dateVal=cols[0]||"";techKey=cols[1]||"";techName=cols[2]||"";customer=cols[3]||"";notes=cols[4]||"";
-        } else {
-          var obj={};headers.forEach(function(h,k){obj[h]=cols[k]||"";});
-          dateVal=obj["Date"]||"";techKey=obj["Tech Key"]||"";techName=obj["Tech Name"]||"";customer=obj["Customer"]||"";notes=obj["Notes"]||"";
+  // Always load from local PLAN data first (instant, reliable)
+  buildPlannerFromLocal();
+  // Then try to supplement/override from Google Sheets in background
+  try{
+    var csvUrl="https://docs.google.com/spreadsheets/d/1nEtOzB9Z4ZZQfBoNLI5nt5xlZAiPIXpWJlNF-6PxCIo/gviz/tq?tqx=out:csv&sheet=Planner&t="+Date.now();
+    fetch(csvUrl).then(function(r){return r.text();})
+      .then(function(text){
+        var lines=text.split("\n");if(lines.length<2)return;
+        var delim=lines[0].indexOf("\t")>=0?"\t":",";        function splitLine(line){
+          if(delim==="\t")return line.split("\t").map(function(c){return c.replace(/^"|"$/g,"").trim();});
+          var cols=[];var cur="";var inQ=false;
+          for(var j=0;j<line.length;j++){var c=line[j];if(c==='"'){inQ=!inQ;}else if(c===","&&!inQ){cols.push(cur.trim());cur="";}else cur+=c;}
+          cols.push(cur.trim());return cols;
         }
-        if(dateVal)plannerJobs.push({date:dateVal,techKey:techKey,techName:techName,customer:customer,notes:notes});
-      }
-      if(plannerJobs.length===0){buildPlannerFromLocal();return;}
-      loadRpts().forEach(function(r){markPlannerDoneNew(r);});
-      buildTechFilters();renderCalendar();updStats();
-      console.log("Planner loaded from Sheets: "+plannerJobs.length+" jobs");
-    })
-    .catch(function(e){console.log("Planner CSV failed:",e.message);buildPlannerFromLocal();});
+        var headers=splitLine(lines[0]);
+        var useIdx=headers[0].toLowerCase().indexOf("date")<0;
+        var sheetJobs=[];
+        for(var i=1;i<lines.length;i++){
+          if(!lines[i].trim())continue;var cols=splitLine(lines[i]);
+          var dateVal,techKey,techName,customer,notes;
+          if(useIdx){
+            dateVal=cols[0]||"";techKey=cols[1]||"";techName=cols[2]||"";customer=cols[3]||"";notes=cols[4]||"";
+          } else {
+            var obj={};headers.forEach(function(h,k){obj[h]=cols[k]||"";});
+            dateVal=obj["Date"]||"";techKey=obj["Tech Key"]||"";techName=obj["Tech Name"]||"";customer=obj["Customer"]||"";notes=obj["Notes"]||"";
+          }
+          if(dateVal)sheetJobs.push({date:dateVal,techKey:techKey,techName:techName,customer:customer,notes:notes});
+        }
+        if(sheetJobs.length>0){
+          plannerJobs=sheetJobs;
+          loadRpts().forEach(function(r){markPlannerDoneNew(r);});
+          buildTechFilters();renderCalendar();updStats();
+          console.log("Planner updated from Sheets: "+plannerJobs.length+" jobs");
+        }
+      })
+      .catch(function(e){console.log("Sheets planner fetch failed (using local):",e.message);});
+  }catch(e){}
 }
-
 function buildPlannerFromLocal(){
   plannerJobs=[];
   Object.keys(PLAN).forEach(function(tk){
