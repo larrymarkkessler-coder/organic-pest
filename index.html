@@ -2377,7 +2377,12 @@ function syncFromSheets(){
 }
 
 function rfRpts(){
-  var rpts=loadRpts();g("rcnt").textContent=rpts.length;g("rbadge").textContent="("+rpts.length+")";
+  var rpts=loadRpts();
+  // Filter to only this tech's reports if locked
+  if(window.TECH_LOCK){
+    rpts=rpts.filter(function(r){return r.techKey===window.TECH_LOCK;});
+  }
+  g("rcnt").textContent=rpts.length;g("rbadge").textContent="("+rpts.length+")";
   var bd=g("rlist");
   if(!rpts.length){bd.innerHTML="<p style=\"color:#666;font-size:12px;padding:8px 0\">No saved reports yet.</p>";return;}
   var h="";
@@ -2465,6 +2470,14 @@ function newRpt(){
   document.querySelectorAll(".pill.on").forEach(function(p){p.classList.remove("on");p.querySelector("input").checked=false;});
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
   rNo=genNo();g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
+  // Show tech name in header if locked
+  if(window.TECH_LOCK){
+    var hdrTitle=document.querySelector(".hdr-title");
+    if(hdrTitle){hdrTitle.textContent=(TECH_SHORT[window.TECH_LOCK]||window.TECH_LOCK)+"'s Platform";}
+    // Hide sync button - techs don't need it
+    var syncBtn=document.querySelector("[onclick*=syncFromSheets]");
+    if(syncBtn)syncBtn.style.display="none";
+  }
   g("subbtn").textContent="Submit and save report";g("subbtn").disabled=false;localStorage.removeItem("org_pdf_done");g("subbtn").onclick=doSubmit;
   g("svst").textContent="";window.scrollTo(0,0);
 }
@@ -2670,12 +2683,26 @@ function buildTechFilters(){
   var div=g("tech-filters");if(!div)return;
   var rb=g("roll-btn-wrap");if(rb)rb.style.display=isMobile?"none":"block";
   div.innerHTML="";
+  // If tech is locked, only show their button - no ALL, no other techs
+  if(window.TECH_LOCK){
+    techFilter=window.TECH_LOCK;
+    TKEYS.forEach(function(tk){
+      if(tk!==window.TECH_LOCK)return;
+      var btn=document.createElement("button");btn.className="tf active";
+      btn.style.background=TECH_COLOURS[tk]||"#555";
+      btn.textContent=TECH_SHORT[tk]||tk;
+      div.appendChild(btn);
+    });
+    return;
+  }
   var allBtn=document.createElement("button");allBtn.className="tf"+(techFilter==="ALL"?" active":"");allBtn.style.background="#555";allBtn.textContent="ALL";
   allBtn.addEventListener("click",function(){techFilter="ALL";buildTechFilters();renderCalendar();updStats();});div.appendChild(allBtn);
   TKEYS.forEach(function(tk){
     var btn=document.createElement("button");btn.className="tf"+(techFilter===tk?" active":"");
-    btn.style.background=TECH_COLOURS[tk]||"#666";btn.textContent=TECH_SHORT[tk]||tk;
-    btn.addEventListener("click",function(){techFilter=tk;buildTechFilters();renderCalendar();updStats();});div.appendChild(btn);
+    btn.style.background=TECH_COLOURS[tk]||"#555";
+    btn.textContent=TECH_SHORT[tk]||tk;
+    btn.addEventListener("click",function(){techFilter=tk;buildTechFilters();renderCalendar();updStats();});
+    div.appendChild(btn);
   });
 }
 
@@ -3090,7 +3117,36 @@ function onPlannerSelect(sel){
 
 function init(){
   isMobile=(window.innerWidth<768);
+  // ── TECH LOCK: read ?tech= URL parameter ──
+  var urlParams=new URLSearchParams(window.location.search);
+  var techLock=urlParams.get("tech")||"";
+  if(techLock){
+    techLock=techLock.toUpperCase();
+    // Pre-select technician and lock the dropdown
+    var tkSel=g("tkey");
+    if(tkSel){
+      for(var i=0;i<tkSel.options.length;i++){
+        if(tkSel.options[i].value===techLock){tkSel.selectedIndex=i;break;}
+      }
+      tkSel.disabled=true;
+      tkSel.style.opacity="0.7";
+    }
+    // Set techFilter for planner
+    techFilter=techLock;
+    // Store globally
+    window.TECH_LOCK=techLock;
+  } else {
+    window.TECH_LOCK="";
+  }
   g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
+  // Show tech name in header if locked
+  if(window.TECH_LOCK){
+    var hdrTitle=document.querySelector(".hdr-title");
+    if(hdrTitle){hdrTitle.textContent=(TECH_SHORT[window.TECH_LOCK]||window.TECH_LOCK)+"'s Platform";}
+    // Hide sync button - techs don't need it
+    var syncBtn=document.querySelector("[onclick*=syncFromSheets]");
+    if(syncBtn)syncBtn.style.display="none";
+  }
   
 g("cs").addEventListener("change",function(){
     var val=this.value;
