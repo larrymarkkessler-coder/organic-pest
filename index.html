@@ -3178,9 +3178,7 @@ function performLocalArchive(flagMonth) {
     (TECH_SHORT[window.TECH_LOCK] || window.TECH_LOCK) : "All";
   
   var msg = "📁 Month End: " + toArchive.length + " reports for " + flagMonth +
-    " have been archived to Google Drive.
-
-Your local reports will now be cleared for the new month.";
+    " have been archived to Google Drive.\n\nYour local reports will now be cleared for the new month.";
   
   if (confirm(msg)) {
     // Clear localStorage reports for that month
