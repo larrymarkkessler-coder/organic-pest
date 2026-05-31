@@ -2476,14 +2476,6 @@ function newRpt(){
   document.querySelectorAll(".pill.on").forEach(function(p){p.classList.remove("on");p.querySelector("input").checked=false;});
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
   rNo=genNo();g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
-  // Show month-end button only on management view
-  if(!window.TECH_LOCK){
-    var meb=g("month-end-btn");if(meb)meb.style.display="inline-block";
-  }
-  // Check for rollover signal (techs only, after short delay)
-  if(window.TECH_LOCK){
-    setTimeout(checkRolloverFlag, 2000);
-  }
   // Show tech name in header if locked
   if(window.TECH_LOCK){
     var hdrTitle=document.querySelector(".hdr-title");
