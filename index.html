@@ -134,6 +134,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div style="display:flex;align-items:center;gap:8px"><div class="navtabs">
 <button class="navbtn active" onclick="sw('form',this)">Service</button>
 <button class="navbtn" onclick="sw('planner',this)">Planner</button>
+<button class="navbtn" id="month-end-btn" onclick="triggerMonthEnd()" style="background:#c0392b;display:none">&#128197; Month End</button>
 
 
 </div><span style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.2);padding:3px 7px;border-radius:5px" id="rno">--</span></div></div>
@@ -2475,6 +2476,14 @@ function newRpt(){
   document.querySelectorAll(".pill.on").forEach(function(p){p.classList.remove("on");p.querySelector("input").checked=false;});
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
   rNo=genNo();g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
+  // Show month-end button only on management view
+  if(!window.TECH_LOCK){
+    var meb=g("month-end-btn");if(meb)meb.style.display="inline-block";
+  }
+  // Check for rollover signal (techs only, after short delay)
+  if(window.TECH_LOCK){
+    setTimeout(checkRolloverFlag, 2000);
+  }
   // Show tech name in header if locked
   if(window.TECH_LOCK){
     var hdrTitle=document.querySelector(".hdr-title");
@@ -3133,6 +3142,95 @@ function onPlannerSelect(sel){
   }
 }
 
+
+// ── MONTH END ROLLOVER ───────────────────────────────────────────
+
+var ROLLOVER_KEY = "org_rollover_done";
+
+function checkRolloverFlag() {
+  // Check if management has triggered a month-end rollover
+  var flagUrl = GAS_URL + "?action=getRolloverFlag&t=" + Date.now();
+  fetch(flagUrl)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if (!d || d.status !== "ok" || !d.flag) return;
+      var flag = d.flag; // e.g. "2026-05"
+      var done = localStorage.getItem(ROLLOVER_KEY) || "";
+      if (flag && flag !== done) {
+        // New rollover triggered - archive and clear
+        performLocalArchive(flag);
+      }
+    })
+    .catch(function(e){ console.log("Rollover check failed:", e.message); });
+}
+
+function performLocalArchive(flagMonth) {
+  var rpts = loadRpts();
+  if (!rpts.length) {
+    localStorage.setItem(ROLLOVER_KEY, flagMonth);
+    rfRpts();
+    return;
+  }
+  // Filter to only reports from the flagged month
+  var toArchive = rpts.filter(function(r) {
+    return r.date && r.date.indexOf(flagMonth) === 0;
+  });
+  
+  if (toArchive.length === 0) {
+    localStorage.setItem(ROLLOVER_KEY, flagMonth);
+    return;
+  }
+
+  // Show notification
+  var tech = (typeof TECH_SHORT !== "undefined" && window.TECH_LOCK) ?
+    (TECH_SHORT[window.TECH_LOCK] || window.TECH_LOCK) : "All";
+  
+  var msg = "📁 Month End: " + toArchive.length + " reports for " + flagMonth +
+    " have been archived to Google Drive.
+
+Your local reports will now be cleared for the new month.";
+  
+  if (confirm(msg)) {
+    // Clear localStorage reports for that month
+    var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
+    toArchive.forEach(function(r) { delete all[r.reportNo]; });
+    localStorage.setItem("org_rpts", JSON.stringify(all));
+    localStorage.setItem(ROLLOVER_KEY, flagMonth);
+    rfRpts();
+    alert("✓ Reports cleared. Starting fresh for the new month!");
+  }
+}
+
+function triggerMonthEnd() {
+  var now = new Date();
+  var month = now.getMonth() + 1; // current month
+  var year = now.getFullYear();
+  var monthName = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"][month-1];
+  
+  if (!confirm("Archive " + monthName + " " + year + " reports to Google Drive and signal all technicians to clear their phones?\n\nThis will:\n• Save all reports to Drive (per technician folder)\n• Prompt each tech to clear their local reports next time they open the app\n\nProceed?")) return;
+  
+  var statusEl = g("month-end-btn");
+  if (statusEl) { statusEl.textContent = "⏳ Archiving..."; statusEl.disabled = true; }
+  
+  var fd = new FormData();
+  fd.append("payload", JSON.stringify({action: "setRolloverFlag", month: month, year: year}));
+  
+  fetch(GAS_URL, {method: "POST", body: fd})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if (statusEl) { statusEl.textContent = "✓ Done!"; }
+      alert("✓ " + monthName + " archived to Google Drive!\n\nEach technician will be prompted to clear their phone next time they open the app.");
+      setTimeout(function(){ 
+        if(statusEl){statusEl.textContent="📅 Month End";statusEl.disabled=false;}
+      }, 3000);
+    })
+    .catch(function(e){
+      if (statusEl) { statusEl.textContent = "📅 Month End"; statusEl.disabled = false; }
+      alert("Error: " + e.message);
+    });
+}
+
 function init(){
   isMobile=(window.innerWidth<768);
   // ── TECH LOCK: read ?tech= URL parameter ──
@@ -3157,6 +3255,14 @@ function init(){
     window.TECH_LOCK="";
   }
   g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
+  // Show month-end button only on management view
+  if(!window.TECH_LOCK){
+    var meb=g("month-end-btn");if(meb)meb.style.display="inline-block";
+  }
+  // Check for rollover signal (techs only, after short delay)
+  if(window.TECH_LOCK){
+    setTimeout(checkRolloverFlag, 2000);
+  }
   // Show tech name in header if locked
   if(window.TECH_LOCK){
     var hdrTitle=document.querySelector(".hdr-title");
