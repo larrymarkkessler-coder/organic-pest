@@ -3131,19 +3131,36 @@ function onPlannerSelect(sel){
   if(!plannerName)return;
   var legalName=(typeof PLAN_MAP!=="undefined")?PLAN_MAP[plannerName]:"";
   if(!legalName)legalName=plannerName;
+  // Is this an individual site name? (needs site auto-selected after customer loads)
+  var siteNames=["AGT Africa Monthly", "AGT Africa Weekly", "AGT Africa Popcorn Monthly", "AGT Africa Popcorn Weekly", "AGT Africa Grainery Monthly", "AGT Africa Grainery Weekly", "AGT Retail Monthly", "AGT Retail Weekly", "AGT Retail Van Eck Monthly", "AGT Retail Van Eck Weekly", "AGT Retail Unity College Monthly", "AGT Retail Unity College Weekly"];
+  var isSite=siteNames.indexOf(plannerName)>=0;
   var csSel=g("cs");
   if(!csSel)return;
-  // Try to find exact match in dropdown
+  // Find matching customer option
   var found=false;
   for(var i=0;i<csSel.options.length;i++){
     if(csSel.options[i].text.trim()===legalName){
       csSel.selectedIndex=i;
+      // Manually trigger the change handler logic
       var evt=new Event("change");csSel.dispatchEvent(evt);
-      found=true;break;
+      found=true;
+      // After sites dropdown populates, auto-select the specific site
+      if(isSite){
+        setTimeout(function(){
+          var siteSel=g("site-sel");
+          if(!siteSel)return;
+          for(var j=0;j<siteSel.options.length;j++){
+            if(siteSel.options[j].value===plannerName){
+              siteSel.selectedIndex=j;
+              break;
+            }
+          }
+        },150);
+      }
+      break;
     }
   }
   if(!found){
-    // Select NEW and pre-fill with legalName
     for(var i=0;i<csSel.options.length;i++){
       if(csSel.options[i].value==="NEW"){csSel.selectedIndex=i;var ev2=new Event("change");csSel.dispatchEvent(ev2);break;}
     }
@@ -3342,9 +3359,6 @@ g("cs").addEventListener("change",function(){
       return;
     }
     g("new-cust-row").style.display="none";
-  if(g("site-row"))g("site-row").style.display="none";
-  if(g("plan-sel"))g("plan-sel").selectedIndex=0;
-  if(g("site-sel"))g("site-sel").innerHTML="<option value=\"\">-- Select site / premises --</option>";
     var idx=parseInt(val);
     var c=CD[idx];selC=c;
     // Populate site dropdown
