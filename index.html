@@ -3241,7 +3241,7 @@ function triggerMonthEnd() {
   var monthName = ["January","February","March","April","May","June",
     "July","August","September","October","November","December"][month-1];
   
-  if (!confirm("Archive " + monthName + " " + year + " reports to Google Drive and signal all technicians to clear their phones?\n\nThis will:\n• Save all reports to Drive (per technician folder)\n• Prompt each tech to clear their local reports next time they open the app\n\nProceed?")) return;
+  if (!confirm("Month End Rollover for " + monthName + " " + year + "\n\nThis will:\n• Archive all service reports to Google Drive\n• Archive & clear the Stock Analysis sheet\n• Archive & clear the Reports sheet\n• Signal all technicians to clear their phones\n\nProceed?")) return;
   
   var statusEl = g("month-end-btn");
   if (statusEl) { statusEl.textContent = "⏳ Archiving..."; statusEl.disabled = true; }
@@ -3252,21 +3252,28 @@ function triggerMonthEnd() {
   fetch(GAS_URL, {method: "POST", body: fd})
     .then(function(r){return r.json();})
     .then(function(d){
-      if (statusEl) { statusEl.textContent = "✓ Done!"; }
-      // Clear local storage for the archived month
+      // Step 2: archive inventory
       var flagMonth = year + "-" + String(month).padStart(2, "0");
-      var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
-      var cleared = 0;
-      Object.keys(all).forEach(function(k){
-        if(all[k].date && all[k].date.indexOf(flagMonth)===0){ delete all[k]; cleared++; }
-      });
-      localStorage.setItem("org_rpts", JSON.stringify(all));
-      localStorage.setItem(ROLLOVER_KEY, flagMonth);
-      rfRpts();
-      alert("✓ " + monthName + " archived to Google Drive!\n" + cleared + " reports cleared from this device.\n\nEach technician will be prompted to clear their phone next time they open the app.");
-      setTimeout(function(){ 
-        if(statusEl){statusEl.textContent="📅 Month End";statusEl.disabled=false;}
-      }, 3000);
+      var fd2 = new FormData();
+      fd2.append("payload", JSON.stringify({action:"archiveInventory", month:month, year:year}));
+      return fetch(GAS_URL, {method:"POST", body:fd2})
+        .then(function(r2){return r2.json();})
+        .then(function(d2){
+          if (statusEl) { statusEl.textContent = "✓ Done!"; }
+          // Clear local storage for the archived month
+          var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
+          var cleared = 0;
+          Object.keys(all).forEach(function(k){
+            if(all[k].date && all[k].date.indexOf(flagMonth)===0){ delete all[k]; cleared++; }
+          });
+          localStorage.setItem("org_rpts", JSON.stringify(all));
+          localStorage.setItem(ROLLOVER_KEY, flagMonth);
+          rfRpts();
+          alert("✓ Month End Complete!\n\n• " + cleared + " reports cleared from this device\n• Stock Analysis archived & cleared\n• Reports sheet cleared\n• Technicians signalled to clear their phones\n\nInventory: " + (d2.message||"done"));
+          setTimeout(function(){ 
+            if(statusEl){statusEl.textContent="📅 Month End";statusEl.disabled=false;}
+          }, 3000);
+        });
     })
     .catch(function(e){
       if (statusEl) { statusEl.textContent = "📅 Month End"; statusEl.disabled = false; }
