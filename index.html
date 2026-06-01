@@ -2378,28 +2378,31 @@ function processSheetData(res){
 }
 
 function syncFromSheets(){
+  var now=new Date();
+  var curMonth=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
   var csvUrl="https://docs.google.com/spreadsheets/d/1nEtOzB9Z4ZZQfBoNLI5nt5xlZAiPIXpWJlNF-6PxCIo/gviz/tq?tqx=out:csv&sheet=Reports&t="+Date.now();
   fetch(csvUrl).then(function(r){return r.text();})
     .then(function(text){
       var lines=text.split("\n");if(lines.length<2)return;
-      var delim=lines[0].indexOf("\t")>=0?"\t":",";
-      function splitLine(line){
+      var delim=lines[0].indexOf("\t")>=0?"\t":",";      function splitLine(line){
         if(delim==="\t")return line.split("\t").map(function(c){return c.replace(/^"|"$/g,"").trim();});
         var cols=[];var cur="";var inQ=false;
-        for(var j=0;j<line.length;j++){var c=line[j];if(c==='"'){inQ=!inQ;}else if(c===","&&!inQ){cols.push(cur.trim());cur="";}else cur+=c;}
+        for(var j=0;j<line.length;j++){var c=line[j];if(c==='"'){ inQ=!inQ;}else if(c===","&&!inQ){cols.push(cur.trim());cur="";}else cur+=c;}
         cols.push(cur.trim());return cols;
       }
       var headers=splitLine(lines[0]);var rows=[];
       for(var i=1;i<lines.length;i++){
         if(!lines[i].trim())continue;var cols=splitLine(lines[i]);
         var obj={};headers.forEach(function(h,k){obj[h]=cols[k]||"";});
-        if(obj["Report No"])rows.push(obj);
+        // Only sync current month reports
+        var d=String(obj["Date"]||"").trim().substring(0,7);
+        if(obj["Report No"]&&d===curMonth)rows.push(obj);
       }
       if(rows.length)processSheetData({status:"ok",reports:rows});
+      else{rfRpts();}
     })
     .catch(function(e){console.log("Sheets CSV sync failed:",e.message);});
 }
-
 function rfRpts(){
   var rpts=loadRpts();
   // Filter to only this tech's reports if locked
@@ -3309,6 +3312,21 @@ function init(){
     window.TECH_LOCK="";
   }
   g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
+  // Purge old-month reports from localStorage on every load
+  (function(){
+    var now=new Date();
+    var curMonth=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+    var all=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+    var purged=0;
+    Object.keys(all).forEach(function(k){
+      var d=String(all[k].date||"").substring(0,7);
+      if(d&&d!==curMonth){delete all[k];purged++;}
+    });
+    if(purged>0){
+      localStorage.setItem("org_rpts",JSON.stringify(all));
+      console.log("Purged "+purged+" reports from previous months");
+    }
+  })();
   // Show month-end button only on management view
   if(!window.TECH_LOCK){
     var meb=g("month-end-btn");if(meb)meb.style.display="inline-block";
