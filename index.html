@@ -140,7 +140,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 </div><span style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.2);padding:3px 7px;border-radius:5px" id="rno">--</span></div></div>
 <div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span> &nbsp;|&nbsp; <span id="clear-month-link" onclick="clearArchivedMonth()" style="cursor:pointer;text-decoration:underline;color:#f9a;display:none">Clear May reports</span></div>
 <div id="panel-form" class="panel active">
-<details class="card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary><div style="padding:0 12px 12px" id="rlist"><p style="color:#666;font-size:12px;padding:8px 0">No saved reports yet.</p></div></details>
+<details class="card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span> &nbsp;<button class="bsm am" onclick="retrySyncAll()" style="font-size:9px;padding:2px 6px;vertical-align:middle">&#8635; Sync to Sheets</button></summary><div style="padding:0 12px 12px" id="rlist"><p style="color:#666;font-size:12px;padding:8px 0">No saved reports yet.</p></div></details>
 <div class="card"><div class="chd">1. Job Details</div><div class="cbd">
 <div class="row r1"><div class="fld"><label>Planner Name <span style="color:#2d7a50;font-size:10px">(select to auto-fill customer)</span></label>
 <select id="plan-sel" onchange="onPlannerSelect(this)">
@@ -3344,6 +3344,37 @@ function clearArchivedMonth(){
   localStorage.setItem("org_rpts", JSON.stringify(all));
   rfRpts();
   alert("✓ Cleared " + count + " reports for " + flag);
+}
+
+function retrySyncAll(){
+  var rpts=loadRpts();
+  if(!rpts.length){alert("No reports to sync.");return;}
+  var btn=document.querySelector("[onclick*=retrySyncAll]");
+  if(btn){btn.textContent="⏳ Syncing...";btn.disabled=true;}
+  var count=0;var done=0;
+  rpts.forEach(function(d){
+    try{
+      var p=JSON.parse(JSON.stringify(d));
+      p.signatureData=d.signatureData?"SIGNED":"UNSIGNED";
+      var fd=new FormData();
+      fd.append("payload",JSON.stringify({action:"saveReport",data:p}));
+      fetch(GAS_URL,{method:"POST",body:fd})
+        .then(function(r){return r.json();})
+        .then(function(res){
+          done++;count++;
+          if(done===rpts.length){
+            if(btn){btn.textContent="✓ Synced "+count;btn.disabled=false;}
+            setTimeout(function(){if(btn)btn.textContent="↻ Sync to Sheets";},3000);
+          }
+        })
+        .catch(function(e){
+          done++;
+          if(done===rpts.length){
+            if(btn){btn.textContent="↻ Sync to Sheets";btn.disabled=false;}
+          }
+        });
+    }catch(e){done++;}
+  });
 }
 function init(){
   isMobile=(window.innerWidth<768);
