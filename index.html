@@ -2711,16 +2711,41 @@ function buildPlannerFromLocal(){
 
 function markPlannerDoneNew(data){
   if(!data.techKey||!data.customer||!data.date)return;
-  var cn=String(data.customer||"").toLowerCase();
+  var submittedCust=String(data.customer||"").trim();
+  var submittedLegal=submittedCust.toLowerCase();
   var reportDate=data.date;
-  // Only mark jobs on or before report date - not future follow-up jobs
+  // Build reverse lookup: legal name -> planner names
+  // e.g. "FLM SA t/a FNV Cheese" -> ["FNV Cheese", "Food Lovers Market warehouse"]
+  var legalToPlanner={};
+  if(typeof PLAN_MAP!=="undefined"){
+    Object.keys(PLAN_MAP).forEach(function(pname){
+      var legal=String(PLAN_MAP[pname]||"").toLowerCase();
+      if(!legalToPlanner[legal])legalToPlanner[legal]=[];
+      legalToPlanner[legal].push(pname.toLowerCase());
+    });
+  }
   plannerJobs.forEach(function(job){
-    if(job.techKey===data.techKey&&job.date<=reportDate){
-      var jc=String(job.customer||"").toLowerCase();
-      if(jc.indexOf(cn.substring(0,8))>=0||cn.indexOf(jc.substring(0,8))>=0){
-        var k=job.techKey+"||"+job.date+"||"+job.customer;
-        if(!jobSt[k]||jobSt[k]==="pend"){jobSt[k]="auto";localStorage.setItem("org_jobst",JSON.stringify(jobSt));}
-      }
+    if(job.techKey!==data.techKey||job.date>reportDate)return;
+    var jc=String(job.customer||"").toLowerCase();
+    var matched=false;
+    // 1. Direct match
+    if(jc===submittedLegal)matched=true;
+    // 2. Submitted legal name contains planner name or vice versa (8+ chars)
+    if(!matched&&jc.length>=4&&submittedLegal.length>=4){
+      var s=Math.min(10,jc.length,submittedLegal.length);
+      if(submittedLegal.indexOf(jc.substring(0,s))>=0||jc.indexOf(submittedLegal.substring(0,s))>=0)matched=true;
+    }
+    // 3. PLAN_MAP reverse: submitted legal name -> planner names
+    if(!matched&&legalToPlanner[submittedLegal]){
+      if(legalToPlanner[submittedLegal].indexOf(jc)>=0)matched=true;
+    }
+    // 4. Check if planner name maps to submitted customer via PLAN_MAP
+    if(!matched&&typeof PLAN_MAP!=="undefined"&&PLAN_MAP[job.customer]){
+      if(String(PLAN_MAP[job.customer]||"").toLowerCase()===submittedLegal)matched=true;
+    }
+    if(matched){
+      var k=job.techKey+"||"+job.date+"||"+job.customer;
+      if(!jobSt[k]||jobSt[k]==="pend"){jobSt[k]="auto";localStorage.setItem("org_jobst",JSON.stringify(jobSt));}
     }
   });
 }
