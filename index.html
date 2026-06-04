@@ -2693,15 +2693,29 @@ var techFilter="ALL";
 var addingToDate=null;
 
 function loadPlannerFromSheets(){
-  // Try to load live from GAS first, fall back to local
-  if(typeof GAS_URL==="undefined"||!GAS_URL){buildPlannerFromLocal();return;}
+  // Check if Sheets planner has been seeded (stored in localStorage)
+  var sheetsSeeded = localStorage.getItem("org_planner_seeded") === "yes";
+
+  if(typeof GAS_URL==="undefined"||!GAS_URL){
+    buildPlannerFromLocal();return;
+  }
   var url=GAS_URL+"?action=getPlanner&t="+Date.now();
   fetch(url)
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d||d.status!=="ok"||!d.jobs||d.jobs.length===0){
-        buildPlannerFromLocal();return;
+        // Only fall back to local if Sheets has never been seeded
+        // If it HAS been seeded but returned 0 jobs, something is wrong - keep current view
+        if(!sheetsSeeded){
+          buildPlannerFromLocal();
+        } else {
+          console.log("Sheets returned 0 jobs but planner was seeded - keeping current view");
+          buildPlannerFromLocal(); // still show something
+        }
+        return;
       }
+      // Mark as seeded
+      localStorage.setItem("org_planner_seeded","yes");
       plannerJobs=d.jobs.map(function(j){
         return {
           date:j.date,
@@ -2715,11 +2729,18 @@ function loadPlannerFromSheets(){
       });
       loadRpts().forEach(function(r){markPlannerDoneNew(r);});
       buildTechFilters();renderCalendar();updStats();
-      console.log("Planner loaded live: "+plannerJobs.length+" jobs");
+      console.log("Planner loaded live from Sheets: "+plannerJobs.length+" jobs");
     })
     .catch(function(e){
-      console.log("Live planner failed, using local:",e.message);
-      buildPlannerFromLocal();
+      console.log("Live planner fetch failed:",e.message);
+      // Only fall back to local if Sheets has never been seeded
+      if(!sheetsSeeded){
+        buildPlannerFromLocal();
+      } else {
+        // Sheets was seeded before - show whatever we have from previous load
+        if(plannerJobs.length===0) buildPlannerFromLocal();
+        else {buildTechFilters();renderCalendar();updStats();}
+      }
     });
 }
 function buildPlannerFromLocal(){
