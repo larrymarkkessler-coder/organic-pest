@@ -1183,7 +1183,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div class="card"><div class="chd" style="display:flex;align-items:center;justify-content:space-between">
   <span>4. Pest Devices</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:normal;cursor:pointer">
-    <span style="color:#fff">Pest Devices Serviced?</span>
+    <span style="color:#1a5c38;font-weight:bold">Pest Devices Serviced?</span>
     <span style="position:relative;display:inline-block;width:40px;height:22px">
       <input type="checkbox" id="devices-serviced-toggle" checked onchange="toggleDevicesServiced(this)"
         style="opacity:0;width:0;height:0;position:absolute">
@@ -1191,7 +1191,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
         <span style="position:absolute;content:'';height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;transform:translateX(18px)"></span>
       </span>
     </span>
-    <span id="devices-serviced-label" style="color:#fff;font-weight:bold">YES</span>
+    <span id="devices-serviced-label" style="color:#1a5c38;font-weight:bold">YES</span>
   </label>
 </div><div class="cbd" style="overflow-x:auto">
 <table><thead><tr><th>Device</th><th>On site</th><th>CAR</th><th>Pest</th><th>Act.</th><th>Material</th><th>Qty and Unit</th><th>Method</th></tr></thead>
@@ -3498,13 +3498,13 @@ function toggleDevicesServiced(cb){
     if(devWrap)devWrap.style.display="block";
     if(slider)slider.style.background="#4caf50";
     if(innerDot)innerDot.style.transform="translateX(18px)";
-    if(label){label.textContent="YES";label.style.color="#fff";}
+    if(label){label.textContent="YES";label.style.color="#1a5c38";}
   } else {
     // NO - hide devices, deactivate guardrail
     if(devWrap)devWrap.style.display="none";
     if(slider)slider.style.background="#e53935";
     if(innerDot)innerDot.style.transform="translateX(0px)";
-    if(label){label.textContent="NO";label.style.color="#ffcdd2";}
+    if(label){label.textContent="NO";label.style.color="#c0392b";}
   }
 }
 function init(){
