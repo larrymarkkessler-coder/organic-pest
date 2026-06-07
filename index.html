@@ -2353,6 +2353,24 @@ function saveRpt(d){
     var fd=new FormData();fd.append("payload",JSON.stringify({action:"saveReport",data:p}));
     fetch(GAS_URL,{method:"POST",body:fd}).then(function(){}).catch(function(e){console.log("Sheets sync:",e.message);});
   }catch(e){console.log("Sheets sync skipped:",e.message);}
+  // Send email to customer if email address provided
+  try{
+    if(d.custEmail&&d.custEmail.trim()){
+      var ef=new FormData();
+      ef.append("payload",JSON.stringify({
+        action:"emailQuoteRequest",
+        email:d.custEmail.trim(),
+        customer:d.customer||"",
+        contactName:d.custConfirm||"",
+        date:d.date||"",
+        techName:d.techName||"",
+        reportNo:d.reportNo||""
+      }));
+      fetch(GAS_URL,{method:"POST",body:ef})
+        .then(function(){console.log("Email sent to "+d.custEmail);})
+        .catch(function(e){console.log("Email failed:",e.message);});
+    }
+  }catch(e){console.log("Email error:",e.message);}
   // Auto-add to planner if follow-up required (once per report)
   if(d.followUp==="Yes"&&d.followUpDate&&d.techKey&&d.customer){
     var fuDone=JSON.parse(localStorage.getItem("org_fu_done")||"{}");
