@@ -2050,7 +2050,7 @@ function addArea(){
 
   var nmInp=inp("area-nm","e.g. Kitchen, Store room");
   var carInp=inp("area-car","");
-  var pestSel=sel("area-pest",[["","Select"],["Cr","Cr – Cockroaches"],["F","F – Flies"],["A","A – Ants"],["SPI","SPI – Stored Product Insects"],["OIN","OIN – Occasional Invaders"],["B","B – Bed Bugs"],["OT","OT – Other"]]);
+  var pestSel=sel("area-pest",[["","Select"],["Cr","Cr – Cockroaches"],["F","F – Flies"],["A","A – Ants"],["R","R – Rodents"],["SPI","SPI – Stored Product Insects"],["OIN","OIN – Occasional Invaders"],["B","B – Bed Bugs"],["OT","OT – Other"]]);
   var actSel=sel("area-act",[["--","--"],["L","L"],["M","M"],["H","H"],["Zero","Zero"]]);
 
   pestSel.addEventListener("change",function(){onAreaPestChange(this);});
@@ -2469,7 +2469,15 @@ function doSubmit(){
   if(!purposes.length) errors.push("At least one purpose of treatment must be selected");
   if(!g("sdesc").value) errors.push("Service description must be selected");
   if(!g("sfreq").value) errors.push("Service frequency must be selected");
-  // Section 3 Areas Inspected is optional - no validation required
+  // Section 3 Areas Inspected - require at least one completed area
+  var areaCards=g("abody")?g("abody").querySelectorAll(".area-card"):[];
+  var validArea=false;
+  areaCards.forEach(function(card){
+    var pest=card.querySelector(".area-pest")?card.querySelector(".area-pest").value:"";
+    var areaName=card.querySelector(".area-nm")?card.querySelector(".area-nm").value.trim():"";
+    if(pest&&pest!==""&&areaName)validArea=true;
+  });
+  if(!validArea)errors.push("At least one area must be completed in Section 3 (Areas Inspected): enter an area name and select a pest");
   // Only require device entry if purpose is NOT exclusively Ants, SPI or Other
   var purposeVals=[];document.querySelectorAll(".pill.on input").forEach(function(i){purposeVals.push(i.value);});
   var noDevicePurposes=["Ants","SPI","Other","Cockroaches"];
