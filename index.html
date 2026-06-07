@@ -1180,7 +1180,20 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div id="abody"></div>
 <button class="addb" id="addbtn">+ Add area</button>
 </div></div>
-<div class="card"><div class="chd">4. Pest Devices</div><div class="cbd" style="overflow-x:auto">
+<div class="card"><div class="chd" style="display:flex;align-items:center;justify-content:space-between">
+  <span>4. Pest Devices</span>
+  <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:normal;cursor:pointer">
+    <span style="color:#fff">Devices Serviced</span>
+    <span style="position:relative;display:inline-block;width:40px;height:22px">
+      <input type="checkbox" id="devices-serviced-toggle" checked onchange="toggleDevicesServiced(this)"
+        style="opacity:0;width:0;height:0;position:absolute">
+      <span id="devices-serviced-slider" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#4caf50;border-radius:22px;transition:.3s">
+        <span style="position:absolute;content:'';height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;transform:translateX(18px)"></span>
+      </span>
+    </span>
+    <span id="devices-serviced-label" style="color:#fff;font-weight:bold">YES</span>
+  </label>
+</div><div class="cbd" style="overflow-x:auto">
 <table><thead><tr><th>Device</th><th>On site</th><th>CAR</th><th>Pest</th><th>Act.</th><th>Material</th><th>Qty and Unit</th><th>Method</th></tr></thead>
 <tbody id="dbody"><tr data-pest="RM"><td style="font-size:11px;font-weight:bold;padding:4px;min-width:140px">Tamper Proof Exterior Rodent Bait Stations</td><td><input type="number" min="0" placeholder="0" style="width:44px" class="dons"></td><td><input type="text" style="width:38px" class="dcar"></td><td style="font-size:11px;color:#1a5c38;font-weight:bold;padding:4px">RM – Rodents</td><td><select class="dact"><option>--</option><option>L</option><option>M</option><option>H</option><option>Zero</option></select></td><td><select class="dmat" id="dmat0"><option value="">Select material</option><option>Zero</option><option>Curagel 2kg</option><option>Non Toxic Blocks 2.5kg (250x10gr block)</option><option>Tomcat Blocks 8kg (800 x 10gr block)</option><option>Ultrakill rat and mouse wax blocks</option></select></td><td><input type="number" min="0" step="0.01" placeholder="0" style="width:46px" class="dqty"><select class="dunit"><option>ml</option><option>gr</option><option>blocks</option><option>bags</option><option>boards</option><option>liners</option><option>cans</option><option>units</option></select></td><td><select class="dmeth"><option>--</option><option>App</option><option>D</option><option>PL</option><option>PS</option><option>SF</option><option>R.T.U</option></select></td></tr><tr data-pest="RM"><td style="font-size:11px;font-weight:bold;padding:4px;min-width:140px">Tamper Proof Interior Rodent Catch Traps</td><td><input type="number" min="0" placeholder="0" style="width:44px" class="dons"></td><td><input type="text" style="width:38px" class="dcar"></td><td style="font-size:11px;color:#1a5c38;font-weight:bold;padding:4px">RM – Rodents</td><td><select class="dact"><option>--</option><option>L</option><option>M</option><option>H</option><option>Zero</option></select></td><td><select class="dmat" id="dmat1"><option value="">Select material</option><option>Zero</option><option>Curagel 2kg</option><option>Non Toxic Blocks 2.5kg (250x10gr block)</option><option>Tomcat Blocks 8kg (800 x 10gr block)</option><option>Ultrakill rat and mouse wax blocks</option></select></td><td><input type="number" min="0" step="0.01" placeholder="0" style="width:46px" class="dqty"><select class="dunit"><option>ml</option><option>gr</option><option>blocks</option><option>bags</option><option>boards</option><option>liners</option><option>cans</option><option>units</option></select></td><td><select class="dmeth"><option>--</option><option>App</option><option>D</option><option>PL</option><option>PS</option><option>SF</option><option>R.T.U</option></select></td></tr><tr data-pest="RM"><td style="font-size:11px;font-weight:bold;padding:4px;min-width:140px">Tamper Proof Interior Rodent Bait Stations</td><td><input type="number" min="0" placeholder="0" style="width:44px" class="dons"></td><td><input type="text" style="width:38px" class="dcar"></td><td style="font-size:11px;color:#1a5c38;font-weight:bold;padding:4px">RM – Rodents</td><td><select class="dact"><option>--</option><option>L</option><option>M</option><option>H</option><option>Zero</option></select></td><td><select class="dmat" id="dmat2"><option value="">Select material</option><option>Zero</option><option>Curagel 2kg</option><option>Non Toxic Blocks 2.5kg (250x10gr block)</option><option>Tomcat Blocks 8kg (800 x 10gr block)</option><option>Ultrakill rat and mouse wax blocks</option></select></td><td><input type="number" min="0" step="0.01" placeholder="0" style="width:46px" class="dqty"><select class="dunit"><option>ml</option><option>gr</option><option>blocks</option><option>bags</option><option>boards</option><option>liners</option><option>cans</option><option>units</option></select></td><td><select class="dmeth"><option>--</option><option>App</option><option>D</option><option>PL</option><option>PS</option><option>SF</option><option>R.T.U</option></select></td></tr><tr data-pest="AD"><td style="font-size:11px;font-weight:bold;padding:4px;min-width:140px">Aerosol Dispensers</td><td><input type="number" min="0" placeholder="0" style="width:44px" class="dons"></td><td><input type="text" style="width:38px" class="dcar"></td><td style="font-size:11px;color:#1a5c38;font-weight:bold;padding:4px">Aerosol</td><td><select class="dact"><option>--</option><option>L</option><option>M</option><option>H</option><option>Zero</option></select></td><td><select class="dmat" id="dmat4"><option value="">Select material</option><option>Zero</option><option>Avimatic Aerosol 300ml</option><option>Avispray 300ml</option></select></td><td><input type="number" min="0" step="0.01" placeholder="0" style="width:46px" class="dqty"><select class="dunit"><option>ml</option><option>gr</option><option>blocks</option><option>bags</option><option>boards</option><option>liners</option><option>cans</option><option>units</option></select></td><td><select class="dmeth"><option>--</option><option>App</option><option>D</option><option>PL</option><option>PS</option><option>SF</option><option>R.T.U</option></select></td></tr><tr data-pest="SPI"><td style="font-size:11px;font-weight:bold;padding:4px;min-width:140px">Moth Traps</td><td><input type="number" min="0" placeholder="0" style="width:44px" class="dons"></td><td><input type="text" style="width:38px" class="dcar"></td><td style="font-size:11px;color:#1a5c38;font-weight:bold;padding:4px">Moths</td><td><select class="dact"><option>--</option><option>L</option><option>M</option><option>H</option><option>Zero</option></select></td><td><select class="dmat" id="dmat5"><option value="">Select material</option><option>Zero</option><option>X-Lure Checkpoint - Glueboards Liners (Code 402)</option></select></td><td><input type="number" min="0" step="0.01" placeholder="0" style="width:46px" class="dqty"><select class="dunit"><option>ml</option><option>gr</option><option>blocks</option><option>bags</option><option>boards</option><option>liners</option><option>cans</option><option>units</option></select></td><td><select class="dmeth"><option>--</option><option>App</option><option>D</option><option>PL</option><option>PS</option><option>SF</option><option>R.T.U</option></select></td></tr></tbody><tbody id="ilt-tbody"></tbody><tr><td colspan="8" style="padding:2px 4px;border-bottom:1px solid #f0f0ec"><button onclick="addILTRow()" style="background:none;border:1px solid #2d7a50;color:#2d7a50;font-size:10px;font-weight:bold;padding:3px 10px;border-radius:12px;cursor:pointer">+ Add light</button></td></tr></table></div></div>
 <div class="card"><div class="chd">5. Equipment Installed / Consumables Used</div><div class="cbd" style="overflow-x:auto">
@@ -2320,7 +2333,7 @@ function collect(){
     address:g("addr").value.trim(),zone:g("pzone").value.trim(),pco:g("pcode").value.trim(),
     date:g("svcd").value,timeIn:g("tin").value,timeOut:g("tout").value,
     purposes:pp,serviceDescription:g("sdesc").value,serviceFrequency:g("sfreq").value,
-    actionReports:g("arpt").value,areas:areas,devices:devs,
+    actionReports:g("arpt").value,areas:areas,devicesServiced:g("devices-serviced-toggle")?g("devices-serviced-toggle").checked:true,devices:(g("devices-serviced-toggle")&&!g("devices-serviced-toggle").checked)?[]:devs,
     recommendations:collectRecs(),
     cash:g("cash").value,followUp:g("fusel").value,followUpDate:g("fudt").value,
     techName:TD[tr2]||"",techKey:TKEYS_MAP[tr2]||"",pcoReg:tr2,
@@ -2482,7 +2495,8 @@ function doSubmit(){
   var purposeVals=[];document.querySelectorAll(".pill.on input").forEach(function(i){purposeVals.push(i.value);});
   var noDevicePurposes=["Ants","SPI","Other","Cockroaches"];
   var requiresDevice=purposeVals.some(function(p){return noDevicePurposes.indexOf(p)<0;});
-  if(requiresDevice){
+  var devicesServiced=g("devices-serviced-toggle")?g("devices-serviced-toggle").checked:true;
+  if(requiresDevice&&devicesServiced){
     var devRows=g("dbody").querySelectorAll("tr");var validDev=false;
     devRows.forEach(function(r){
       var act=r.querySelector(".dact");
@@ -3454,6 +3468,27 @@ function seedPlannerToSheets(){
     });
 }
 
+
+function toggleDevicesServiced(cb){
+  var devSection=g("dbody")?g("dbody").closest("table"):null;
+  var devWrap=g("dbody")?g("dbody").closest(".cbd"):null;
+  var slider=g("devices-serviced-slider");
+  var label=g("devices-serviced-label");
+  var innerDot=slider?slider.querySelector("span"):null;
+  if(cb.checked){
+    // YES - show devices, activate guardrail
+    if(devWrap)devWrap.style.display="block";
+    if(slider)slider.style.background="#4caf50";
+    if(innerDot)innerDot.style.transform="translateX(18px)";
+    if(label){label.textContent="YES";label.style.color="#fff";}
+  } else {
+    // NO - hide devices, deactivate guardrail
+    if(devWrap)devWrap.style.display="none";
+    if(slider)slider.style.background="#e53935";
+    if(innerDot)innerDot.style.transform="translateX(0px)";
+    if(label){label.textContent="NO";label.style.color="#ffcdd2";}
+  }
+}
 function init(){
   isMobile=(window.innerWidth<768);
   // ── TECH LOCK: read ?tech= URL parameter ──
