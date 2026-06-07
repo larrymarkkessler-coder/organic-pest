@@ -2615,11 +2615,11 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   fR([["Cash collected",data.cash||"",0.4],["Action reports outstanding",data.actionReports||"",0.6]]);
   fR([["Follow-up required",data.followUp,0.22],["Anticipated date",data.followUpDate,0.25],["Technician",data.techName,0.30],["PCO Reg No.",data.pcoReg,0.23]]);
   fR([["Contact email",data.custEmail||"",0.65],["Contact cell",data.custCell||"",0.35]]);
-  var sh=32,sy=y;
-  doc.setFillColor(GL[0],GL[1],GL[2]);doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);doc.rect(M,sy,CW*0.48,sh,"FD");
+  var sh=36,sy=y;
+  doc.setFillColor(GL[0],GL[1],GL[2]);doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);doc.rect(M,sy,CW*0.49,sh,"FD");
   doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text("CUSTOMER NAME",M+1.5,sy+4);
-  doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text(data.custConfirm||"",M+1.5,sy+sh-4);
-  var sx=M+CW*0.52,sw=CW*0.48;doc.setFillColor(GL[0],GL[1],GL[2]);doc.rect(sx,sy,sw,sh,"FD");
+  doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text(data.custConfirm||"",M+1.5,sy+16);
+  var sx=M+CW*0.50,sw=CW*0.50;doc.setFillColor(GL[0],GL[1],GL[2]);doc.rect(sx,sy,sw,sh,"FD");
   doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text("CUSTOMER SIGNATURE",sx+1.5,sy+4);
   if(data.signatureData&&data.signatureData.indexOf("data:image")===0){try{doc.addImage(data.signatureData,"PNG",sx+2,sy+6,sw-4,sh-10,undefined,"FAST");}catch(e){}}
   try{var dt2=new Date(data.submittedAt);doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(5.5);doc.setFont("helvetica","oblique");doc.text("Signed: "+dt2.toLocaleDateString()+" "+dt2.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),sx+1.5,sy+sh-1.5);}catch(e){}
