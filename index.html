@@ -2533,8 +2533,9 @@ function doSubmit(){
   if(!g("ccnf").value.trim()) errors.push("Customer confirmation name must be printed");
   if(!sigD) errors.push("Customer signature must be captured and confirmed");
   var custEmail=g("cust-email").value.trim();
-  if(!custEmail) errors.push("Customer contact email address must be entered");
-  else if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(custEmail)) errors.push("Customer contact email address is not valid");
+  var custCell2=g("cust-cell")?g("cust-cell").value.trim():"";
+  if(!custEmail&&!custCell2) errors.push("Please enter either a customer email address or cell number in Section 8");
+  else if(custEmail&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(custEmail)) errors.push("Customer contact email address is not valid");
   if(errors.length){
     alert("Please complete the following before submitting:\n\n"+errors.map(function(e,i){return (i+1)+". "+e;}).join("\n"));
     return;
