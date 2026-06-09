@@ -2348,6 +2348,12 @@ function collect(){
 function saveRpt(d){
   var a=JSON.parse(localStorage.getItem("org_rpts")||"{}");a[d.reportNo]=d;
   localStorage.setItem("org_rpts",JSON.stringify(a));
+  // Cross off the job on the planner immediately
+  try{
+    markPlannerDoneNew(d);
+    renderCalendar();
+    updStats();
+  }catch(e){console.log("Planner cross-off error:",e.message);}
   try{
     var p=JSON.parse(JSON.stringify(d));p.signatureData=d.signatureData?"SIGNED":"UNSIGNED";
     var fd=new FormData();fd.append("payload",JSON.stringify({action:"saveReport",data:p}));
