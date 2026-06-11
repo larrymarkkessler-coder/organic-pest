@@ -2724,27 +2724,7 @@ function uploadPDFtoDrive(rno){
     fetch(GAS_URL,{method:"POST",body:fd})
       .then(function(){
         console.log("PDF uploaded and email triggered: "+filename);
-        // Send quote request email if there are quote items
-        var qd=data.quotations||{items:[]};
-        var qi=Array.isArray(qd.items)?qd.items:(Array.isArray(qd)?qd:[]);
-        if(qi.length>0){
-          var qfd=new FormData();
-          qfd.append("payload",JSON.stringify({
-            action:"emailQuoteRequest",
-            customer:data.customer||"",
-            address:data.address||"",
-            date:data.date||"",
-            techName:data.techName||"",
-            reportNo:data.reportNo||"",
-            quoteAttn:qd.attn||"",
-            quoteEmail:qd.email||"",
-            quoteNotes:qd.notes||"",
-            quoteItems:qi
-          }));
-          fetch(GAS_URL,{method:"POST",body:qfd})
-            .then(function(){console.log("Quote request email sent");})
-            .catch(function(e){console.log("Quote email failed:",e.message);});
-        }
+        // Quote request handled in saveRpt
         // Send WhatsApp to customer cell if provided
         if(data.custCell){
           var waNum=data.custCell.replace(/[^0-9]/g,"");
