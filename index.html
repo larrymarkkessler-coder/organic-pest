@@ -2272,18 +2272,27 @@ function collect(){
     var areaName=card.querySelector(".area-nm").value;
     var car=card.querySelector(".area-car").value;
     var act=card.querySelector(".area-act").value;
-    card.querySelectorAll(".area-mat-block").forEach(function(mb){
-      var mat=mb.querySelector(".area-mat-sel").value;
-      var qty=mb.querySelector(".area-qty").value;
-      var unit=mb.querySelector(".area-unit").value;
-      var diluted=mb.querySelector(".area-dil-yn").value;
-      var conc=mb.querySelector(".area-conc")?mb.querySelector(".area-conc").value:"";
-      var sol=mb.querySelector(".area-sol")?mb.querySelector(".area-sol").value:"";
-      var meth=mb.querySelector(".area-meth")?mb.querySelector(".area-meth").value:"";
+    if(!areaName&&!pest) return; // skip completely empty cards
+    var matBlocks=card.querySelectorAll(".area-mat-block");
+    if(matBlocks.length===0){
+      // Area with no materials - still save the area row
       areas.push({area:areaName,car:car,pests:pest,activity:act,
-        material:mat,qty:qty,unit:unit,method:meth,diluted:diluted,
-        concentration:conc,solutionUsed:sol});
-    });
+        material:"",qty:"",unit:"",method:"",diluted:"",
+        concentration:"",solutionUsed:""});
+    } else {
+      matBlocks.forEach(function(mb){
+        var mat=mb.querySelector(".area-mat-sel").value;
+        var qty=mb.querySelector(".area-qty").value;
+        var unit=mb.querySelector(".area-unit").value;
+        var diluted=mb.querySelector(".area-dil-yn").value;
+        var conc=mb.querySelector(".area-conc")?mb.querySelector(".area-conc").value:"";
+        var sol=mb.querySelector(".area-sol")?mb.querySelector(".area-sol").value:"";
+        var meth=mb.querySelector(".area-meth")?mb.querySelector(".area-meth").value:"";
+        areas.push({area:areaName,car:car,pests:pest,activity:act,
+          material:mat,qty:qty,unit:unit,method:meth,diluted:diluted,
+          concentration:conc,solutionUsed:sol});
+      });
+    }
   });
   var devs=[];
   // Collect regular device rows
