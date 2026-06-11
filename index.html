@@ -2363,15 +2363,14 @@ function saveRpt(d){
   try{
     if(d.custEmail&&d.custEmail.trim()){
       var ef=new FormData();
-      ef.append("payload",JSON.stringify({
-        action:"emailQuoteRequest",
-        email:d.custEmail.trim(),
-        customer:d.customer||"",
-        contactName:d.custConfirm||"",
-        date:d.date||"",
-        techName:d.techName||"",
-        reportNo:d.reportNo||""
-      }));
+      // Send full report data so email contains all service details
+      var emailPayload=JSON.parse(JSON.stringify(d));
+      emailPayload.action="emailQuoteRequest";
+      emailPayload.email=d.custEmail.trim();
+      emailPayload.contactName=d.custConfirm||"";
+      // Remove signature image to keep payload small
+      emailPayload.signatureData=d.signatureData?"SIGNED":"UNSIGNED";
+      ef.append("payload",JSON.stringify(emailPayload));
       fetch(GAS_URL,{method:"POST",body:ef})
         .then(function(){console.log("Email sent to "+d.custEmail);})
         .catch(function(e){console.log("Email failed:",e.message);});
