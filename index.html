@@ -2368,6 +2368,29 @@ function saveRpt(d){
     var fd=new FormData();fd.append("payload",JSON.stringify({action:"saveReport",data:p}));
     fetch(GAS_URL,{method:"POST",body:fd}).then(function(){}).catch(function(e){console.log("Sheets sync:",e.message);});
   }catch(e){console.log("Sheets sync skipped:",e.message);}
+  // Send quote request to office immediately if quote items exist
+  try{
+    var qd2=d.quotations||{items:[]};
+    var qi2=Array.isArray(qd2.items)?qd2.items:(Array.isArray(qd2)?qd2:[]);
+    if(qi2.length>0){
+      var qfd2=new FormData();
+      qfd2.append("payload",JSON.stringify({
+        action:"emailQuoteRequest",
+        customer:d.customer||"",
+        address:d.address||"",
+        date:d.date||"",
+        techName:d.techName||"",
+        reportNo:d.reportNo||"",
+        quoteAttn:qd2.attn||"",
+        quoteEmail:qd2.email||"",
+        quoteNotes:qd2.notes||"",
+        quoteItems:qi2
+      }));
+      fetch(GAS_URL,{method:"POST",body:qfd2})
+        .then(function(){console.log("Quote request sent to office for "+d.reportNo);})
+        .catch(function(e){console.log("Quote email failed:",e.message);});
+    }
+  }catch(e){console.log("Quote trigger error:",e.message);}
   // Email is now sent automatically via savePDF action (PDF attachment)
   // Auto-add to planner if follow-up required (once per report)
   if(d.followUp==="Yes"&&d.followUpDate&&d.techKey&&d.customer){
