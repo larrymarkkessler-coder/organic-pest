@@ -1,0 +1,8 @@
+# Only index.html goes to GitHub — all other files stay local
+*.gs
+*.py
+*.docx
+*.xlsx
+*.pdf
+*.txt
+Organic Platform Script Archive - Platform Cahnges/
