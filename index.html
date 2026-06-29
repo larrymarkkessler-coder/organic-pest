@@ -2566,7 +2566,15 @@ function newRpt(){
   if(g("site-row"))g("site-row").style.display="none";
   if(g("plan-sel"))g("plan-sel").selectedIndex=0;
   if(g("site-sel"))g("site-sel").innerHTML="<option value=\"\">-- Select site / premises --</option>";
-  g("cs").value="";g("sdesc").value="";g("sfreq").value="";g("fusel").value="";g("tsel").value="";g("preg").value="";
+  g("cs").value="";g("sdesc").value="";g("sfreq").value="";g("fusel").value="";
+  // Restore tech lock after clearing; otherwise clear the selector
+  if(window.TECH_LOCK){
+    var pcoRegNew="";for(var kk in TKEYS_MAP){if(TKEYS_MAP[kk]===window.TECH_LOCK){pcoRegNew=kk;break;}}
+    g("tsel").value=pcoRegNew;g("preg").value=pcoRegNew;
+    g("tsel").disabled=true;g("tsel").style.opacity="0.7";
+  } else {
+    g("tsel").value="";g("preg").value="";g("tsel").disabled=false;g("tsel").style.opacity="";
+  }
   g("fu-row").style.display="none";g("cnote").classList.remove("show");g("cnote").textContent="";
   document.querySelectorAll(".pill.on").forEach(function(p){p.classList.remove("on");p.querySelector("input").checked=false;});
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
@@ -3576,11 +3584,11 @@ function init(){
   if(techLock){
     techLock=techLock.toUpperCase();
     // Pre-select technician and lock the dropdown
-    var tkSel=g("tkey");
+    var tkSel=g("tsel");
     if(tkSel){
-      for(var i=0;i<tkSel.options.length;i++){
-        if(tkSel.options[i].value===techLock){tkSel.selectedIndex=i;break;}
-      }
+      // TKEYS_MAP keys are PCO regs, values are tech keys — find the matching PCO reg
+      var pcoMatch="";for(var pr in TKEYS_MAP){if(TKEYS_MAP[pr]===techLock){pcoMatch=pr;break;}}
+      if(pcoMatch){tkSel.value=pcoMatch;g("preg").value=pcoMatch;}
       tkSel.disabled=true;
       tkSel.style.opacity="0.7";
     }
