@@ -2578,6 +2578,10 @@ function newRpt(){
   g("fu-row").style.display="none";g("cnote").classList.remove("show");g("cnote").textContent="";
   document.querySelectorAll(".pill.on").forEach(function(p){p.classList.remove("on");p.querySelector("input").checked=false;});
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
+  // Reset static device rows (dbody)
+  var dbReset=g("dbody");if(dbReset){dbReset.querySelectorAll("tr").forEach(function(r){r.querySelectorAll("input").forEach(function(el){el.value="";});r.querySelectorAll("select").forEach(function(el){el.selectedIndex=0;});});}
+  // Reset equipment rows
+  var eqReset=g("equip-body");if(eqReset)eqReset.innerHTML="";
   rNo=genNo();g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
   // Show tech name in header if locked
   if(window.TECH_LOCK){
