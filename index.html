@@ -2578,8 +2578,9 @@ function newRpt(){
   g("fu-row").style.display="none";g("cnote").classList.remove("show");g("cnote").textContent="";
   document.querySelectorAll(".pill.on").forEach(function(p){p.classList.remove("on");p.querySelector("input").checked=false;});
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
-  // Reset static device rows (dbody)
-  var dbReset=g("dbody");if(dbReset){dbReset.querySelectorAll("tr").forEach(function(r){r.querySelectorAll("input").forEach(function(el){el.value="";});r.querySelectorAll("select").forEach(function(el){el.selectedIndex=0;});});}
+  // Reset static device rows in dbody — target each class directly
+  document.querySelectorAll("#dbody .dons,#dbody .dcar,#dbody .dqty").forEach(function(el){el.value="";});
+  document.querySelectorAll("#dbody .dact,#dbody .dmat,#dbody .dunit,#dbody .dmeth").forEach(function(el){el.selectedIndex=0;});
   // Reset equipment rows
   var eqReset=g("equip-body");if(eqReset)eqReset.innerHTML="";
   rNo=genNo();g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
@@ -3696,7 +3697,7 @@ g("cs").addEventListener("change",function(){
   });
   g("tsel").addEventListener("change",function(){g("preg").value=this.value||"";});
   g("fusel").addEventListener("change",function(){g("fu-row").style.display=this.value==="Yes"?"block":"none";});
-  g("addbtn").addEventListener("click",addArea);g("subbtn").addEventListener("click",doSubmit);
+  g("addbtn").addEventListener("click",addArea);g("subbtn").onclick=doSubmit;
   g("clrbtn").addEventListener("click",clrSig);g("cnfbtn").addEventListener("click",cnfSig);
   g("rsnbtn").addEventListener("click",function(){sigD=null;clrSig();});
   initSig();areaCnt=0;addArea();rfRpts();setTimeout(function(){addILTRow();},100);
