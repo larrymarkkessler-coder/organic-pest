@@ -1873,6 +1873,7 @@ var REG_NUMBERS={
   "promethrin ec (1 x 1lt)":"L10291",
   "pybuthrin 44 (1x20lt)":"L4629",
   "pybuthrin 4t4 lite (1x5lt)":"L4629",
+  "pybuthrin 1x5lt":"L4629",
   "quickbayt spray wg 10 (1x1kg)":"L8024",
   "rossi super 200 (1x1lt)":"L8376",
   "rossi super 200":"L8376",
@@ -2215,7 +2216,7 @@ function makeAreaMatBlock(areaId,matIdx,mats){
   qtyInp.className="area-qty";qtyInp.placeholder="0";
   qtyInp.addEventListener("input",function(){calcAreaConc(div);});
 
-  var unitSel=selEl("area-unit",["ml","gr","blocks","bags","units"]);
+  var unitSel=selEl("area-unit",["ml","gr","blocks","bags","cans","units"]);
   var methSel=selEl("area-meth",["--","App","D","PL","PS","SF","R.T.U"]);
 
   var matFld=fld("Material",matSel);
