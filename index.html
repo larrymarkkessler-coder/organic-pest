@@ -3639,6 +3639,9 @@ function init(){
   var techLock=urlParams.get("tech")||"";
   if(techLock){
     techLock=techLock.toUpperCase();
+    // Normalize URL aliases so friendly names resolve to internal tech keys
+    var TECH_URL_ALIASES={"STEPHEN":"STEVEN"};
+    if(TECH_URL_ALIASES[techLock])techLock=TECH_URL_ALIASES[techLock];
     // Pre-select technician and lock the dropdown
     var tkSel=g("tsel");
     if(tkSel){
