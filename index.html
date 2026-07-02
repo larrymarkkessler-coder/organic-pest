@@ -2025,10 +2025,10 @@ function devPestChg(sel){
   mats.forEach(function(m){var o=document.createElement("option");o.textContent=m;ms.appendChild(o);});
 }
 
-var EQUIP_MATS={"Flies": ["Cobra Front Cover", "Illume - Stainless Steel", "Illume 26 W Unit - White", "Illume Unit - Black", "Illume Unit - Brass", "LED Insect Light Trap - Genus Cobra 218M Catcher (14w)", "LED Insect Light Trap - Luralite Centro - Black", "LED Insect Light Trap - Luralite Centro - Brass", "LED Insect Light Trap - Luralite Centro - Stainless Steel", "LED Insect Light Trap - Luralite Centro - White", "LED Insect Light Trap - Practika - Aluminium (14w)", "LED Insect Light Trap - Practika - Black (14w)", "Liberator Stainless Steel Unit * 60W", "Red Tops", "Unit - Cobra (3x15w)", "Viper 30 Catcher", "Viper 30 Killer", "Viper 60 Catcher", "Viper 60 Killer"], "Moths": ["X-Lure Checkpoint Moth Trap (Code 401)"], "Rodents": ["ABS .9 Plaques (150mm x 105mm)", "ABS Bait Station Plaques - Small 150mmx50mm", "Bait Stations on Loan", "Cat Cage", "Charlie Bait Stations", "Coopers Rodent Snap Trap (1x10's)", "Metal Snap Trap", "Mice Glue Board (72 Box) (Code 616)", "Pro MEDIUM Multi Catch Rodent Trap", "Protecta Multiple Catch Traps 24/7", "Rat Snap Trap", "Rodent Econo Stations", "Rodenthor Beta Bait Stations", "Square Cardboard Mouse Trap", "Trapper Mini Rex", "Trapper Rat Glueboard (1x48)"]};
+var EQUIP_MATS={"Flies": ["Cobra Front Cover", "Illume - Stainless Steel", "Illume 26 W Unit - White", "Illume Unit - Black", "Illume Unit - Brass", "LED Insect Light Trap - Genus Cobra 218M Catcher (14w)", "LED Insect Light Trap - Luralite Centro - Black", "LED Insect Light Trap - Luralite Centro - Brass", "LED Insect Light Trap - Luralite Centro - Stainless Steel", "LED Insect Light Trap - Luralite Centro - White", "LED Insect Light Trap - Practika - Aluminium (14w)", "LED Insect Light Trap - Practika - Black (14w)", "Liberator Stainless Steel Unit * 60W", "Red Tops", "Ultrakill Fly Scatter Bait (10x500g)", "Unit - Cobra (3x15w)", "Viper 30 Catcher", "Viper 30 Killer", "Viper 60 Catcher", "Viper 60 Killer"], "Moths": ["X-Lure Checkpoint Moth Trap (Code 401)"], "Rodents": ["ABS .9 Plaques (150mm x 105mm)", "ABS Bait Station Plaques - Small 150mmx50mm", "Bait Stations on Loan", "Cat Cage", "Charlie Bait Stations", "Coopers Rodent Snap Trap (1x10's)", "Metal Snap Trap", "Mice Glue Board (72 Box) (Code 616)", "Pro MEDIUM Multi Catch Rodent Trap", "Protecta Multiple Catch Traps 24/7", "Rat Snap Trap", "Rodent Econo Stations", "Rodenthor Beta Bait Stations", "Square Cardboard Mouse Trap", "Trapper Mini Rex", "Trapper Rat Glueboard (1x48)"]};
 var EQUIP_CATS=["Flies", "Moths", "Rodents"];
 
-var QUOTE_MATS={"Cockroaches": ["Advion C-Roach Gel Bait (4x30gr)", "Cockroach Glueboard (No 10 G/board) - 100u/box", "Ecothor Insect Monitor (1x25pack)", "Ecothor Insect Monitor Glueboard (100pack)", "Insect Monitor Black Plastic", "Insect Monitor G/Board - Plastic", "NuPro Aerosol / Nuvan Profi (1x330ml)"], "Flies": ["Cobra Front Cover", "ILT Starter", "Illume Glueboards (Box of 10)", "Illume Lamp UV 26 W S/P Tubes", "Illume Tube - New Specification Sept 18", "Insect Trap Fly Glue Boards (Cento) * 6", "LED Insect Light Trap - Genus Cobra 218M Catcher (14w)", "LED Insect Light Trap - Luralite Centro - Black", "LED Insect Light Trap - Luralite Centro - Brass", "LED Insect Light Trap - Luralite Centro - Stainless Steel", "LED Insect Light Trap - Luralite Centro - White", "LED Insect Light Trap - Practika - Aluminium (14w)", "LED Insect Light Trap - Practika - Black (14w)", "LED Insect Light Trap Long Lamps - Practika (Box of 2)", "LED Insect Light Trap Short Lamps - Cento (Box of 2)", "Universal Glueboard Code 313 (15 PACK)", "Vectorthor 15W Astron Tube"], "Moths": ["X-Lure Checkpoint - Glueboards Liners (Code 402)", "X-Lure Checkpoint Moth Trap (Code 401)"], "Rodents": ["ABS .9 Plaques (150mm x 105mm)", "ABS Bait Station Plaques - Small 150mmx50mm", "Bait Stations on Loan", "Cat Cage", "Charlie Bait Stations", "Coopers Rodent Snap Trap (1x10's)", "Curagel 2kg", "Metal Snap Trap", "Mice Glue Board (72 Box) (Code 616)", "Non Toxic Blocks 2.5kg (250x10gr block)", "Pro MEDIUM Multi Catch Rodent Trap", "Protecta Multiple Catch Traps 24/7", "Rat Snap Trap", "Rodent Econo Stations", "Rodenthor Beta Bait Stations", "Square Cardboard Mouse Trap", "Tomcat Blocks 8kg (800 x 10gr block)", "Trapper Mini Rex", "Trapper Rat Glueboard (1x48)", "Ultrakill rat and mouse wax blocks"], "Fogging": ["K-Obiol"]};
+var QUOTE_MATS={"Cockroaches": ["Advion C-Roach Gel Bait (4x30gr)", "Cockroach Glueboard (No 10 G/board) - 100u/box", "Ecothor Insect Monitor (1x25pack)", "Ecothor Insect Monitor Glueboard (100pack)", "Insect Monitor Black Plastic", "Insect Monitor G/Board - Plastic", "NuPro Aerosol / Nuvan Profi (1x330ml)"], "Flies": ["Cobra Front Cover", "ILT Starter", "Illume Glueboards (Box of 10)", "Illume Lamp UV 26 W S/P Tubes", "Illume Tube - New Specification Sept 18", "Insect Trap Fly Glue Boards (Cento) * 6", "LED Insect Light Trap - Genus Cobra 218M Catcher (14w)", "LED Insect Light Trap - Luralite Centro - Black", "LED Insect Light Trap - Luralite Centro - Brass", "LED Insect Light Trap - Luralite Centro - Stainless Steel", "LED Insect Light Trap - Luralite Centro - White", "LED Insect Light Trap - Practika - Aluminium (14w)", "LED Insect Light Trap - Practika - Black (14w)", "LED Insect Light Trap Long Lamps - Practika (Box of 2)", "LED Insect Light Trap Short Lamps - Cento (Box of 2)", "Ultrakill Fly Scatter Bait (10x500g)", "Universal Glueboard Code 313 (15 PACK)", "Vectorthor 15W Astron Tube"], "Moths": ["X-Lure Checkpoint - Glueboards Liners (Code 402)", "X-Lure Checkpoint Moth Trap (Code 401)"], "Rodents": ["ABS .9 Plaques (150mm x 105mm)", "ABS Bait Station Plaques - Small 150mmx50mm", "Bait Stations on Loan", "Cat Cage", "Charlie Bait Stations", "Coopers Rodent Snap Trap (1x10's)", "Curagel 2kg", "Metal Snap Trap", "Mice Glue Board (72 Box) (Code 616)", "Non Toxic Blocks 2.5kg (250x10gr block)", "Pro MEDIUM Multi Catch Rodent Trap", "Protecta Multiple Catch Traps 24/7", "Rat Snap Trap", "Rodent Econo Stations", "Rodenthor Beta Bait Stations", "Square Cardboard Mouse Trap", "Tomcat Blocks 8kg (800 x 10gr block)", "Trapper Mini Rex", "Trapper Rat Glueboard (1x48)", "Ultrakill rat and mouse wax blocks"], "Fogging": ["K-Obiol"]};
 var QUOTE_CATS=["Cockroaches", "Flies", "Fogging", "Moths", "Rodents"];
 
 function addEquipRow(){
@@ -2416,7 +2416,11 @@ function saveRpt(d){
   try{
     var p=JSON.parse(JSON.stringify(d));p.signatureData=d.signatureData?"SIGNED":"UNSIGNED";
     var fd=new FormData();fd.append("payload",JSON.stringify({action:"saveReport",data:p}));
-    fetch(GAS_URL,{method:"POST",body:fd}).then(function(){}).catch(function(e){console.log("Sheets sync:",e.message);});
+    var _pend=JSON.parse(localStorage.getItem("org_pending_sync")||"{}");
+    _pend[d.reportNo]=true;localStorage.setItem("org_pending_sync",JSON.stringify(_pend));
+    fetch(GAS_URL,{method:"POST",body:fd})
+      .then(function(){var _p=JSON.parse(localStorage.getItem("org_pending_sync")||"{}");delete _p[d.reportNo];localStorage.setItem("org_pending_sync",JSON.stringify(_p));})
+      .catch(function(e){console.log("Sheets sync failed (will retry on next load):",e.message);});
   }catch(e){console.log("Sheets sync skipped:",e.message);}
   // Send quote request to office immediately if quote items exist
   try{
@@ -3632,6 +3636,21 @@ function toggleDevicesServiced(cb){
     if(label){label.textContent="NO";label.style.color="#c0392b";}
   }
 }
+function retrySyncPending(){
+  var pending=JSON.parse(localStorage.getItem("org_pending_sync")||"{}");
+  var keys=Object.keys(pending);if(!keys.length)return;
+  var rpts=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  console.log("Retrying Sheets sync for "+keys.length+" report(s): "+keys.join(", "));
+  keys.forEach(function(rno){
+    var d=rpts[rno];
+    if(!d){var _p=JSON.parse(localStorage.getItem("org_pending_sync")||"{}");delete _p[rno];localStorage.setItem("org_pending_sync",JSON.stringify(_p));return;}
+    var p=JSON.parse(JSON.stringify(d));p.signatureData=d.signatureData?"SIGNED":"UNSIGNED";
+    var fd=new FormData();fd.append("payload",JSON.stringify({action:"saveReport",data:p}));
+    fetch(GAS_URL,{method:"POST",body:fd})
+      .then(function(){var _p=JSON.parse(localStorage.getItem("org_pending_sync")||"{}");delete _p[rno];localStorage.setItem("org_pending_sync",JSON.stringify(_p));console.log("Retry sync OK: "+rno);})
+      .catch(function(e){console.log("Retry sync still failed for "+rno+":",e.message);});
+  });
+}
 function init(){
   isMobile=(window.innerWidth<768);
   // ── TECH LOCK: read ?tech= URL parameter ──
@@ -3763,6 +3782,7 @@ g("cs").addEventListener("change",function(){
   initSig();areaCnt=0;addArea();rfRpts();setTimeout(function(){addILTRow();},100);
   setTimeout(syncFromSheets,1500);
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
+  setTimeout(retrySyncPending,3000);
   if(isMobile){
     document.querySelectorAll(".navbtn").forEach(function(btn){
       if(btn.textContent.indexOf("Digest")>=0||btn.textContent.indexOf("Stock Recon")>=0)
