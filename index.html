@@ -2566,10 +2566,11 @@ function rfRpts(){
 }
 
 function delRpt(rn){
-  if(!confirm("Delete "+rn+"?"))return;
+  // Removes the report from THIS DEVICE only. The master Google Sheet is
+  // never touched — office copies of submitted reports must stay intact.
+  if(!confirm("Remove "+rn+" from this device?\n\nThe office copy in Google Sheets is NOT affected."))return;
   var a=JSON.parse(localStorage.getItem("org_rpts")||"{}");delete a[rn];
   localStorage.setItem("org_rpts",JSON.stringify(a));rfRpts();
-  try{var fd=new FormData();fd.append("payload",JSON.stringify({action:"deleteReport",reportNo:rn}));fetch(GAS_URL,{method:"POST",body:fd}).catch(function(){});}catch(e){}
 }
 
 /* ── VALIDATION & SUBMIT ── */
