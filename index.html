@@ -564,6 +564,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <option value="Wright Place">Wright Place</option>
 </select></div></div>
 <div class="row r1"><div class="fld"><label>Customer name</label><select id="cs"><option value="">-- Select customer --</option>
+<option value="NEW">+ Add new customer (not in list)</option>
 <option value="0">1 Antrim C/o IMMK Consultants (Pty) Ltd</option>
 <option value="1">10 Belgrave HOA</option>
 <option value="2">10 Dover Road c/o Barclay Ellot & Associates Pty Ltd</option>
@@ -2400,6 +2401,7 @@ function collect(){
   var tr2=g("tsel").value;
   return {reportNo:rNo,submittedAt:new Date().toISOString(),
     customer:g("cs").value==="NEW"?(g("new-cust-name").value.trim()||"New Customer"):selC?selC[0]:"",
+    isNewCustomer:g("cs").value==="NEW",
     site:g("site-sel")?g("site-sel").value:"",
     address:g("addr").value.trim(),zone:g("pzone").value.trim(),pco:g("pcode").value.trim(),
     date:g("svcd").value,timeIn:g("tin").value,timeOut:g("tout").value,
