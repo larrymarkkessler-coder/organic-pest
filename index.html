@@ -2869,6 +2869,7 @@ function markPlannerDoneNew(data){
   if(!data.techKey||!data.customer||!data.date)return;
   var submittedCust=String(data.customer||"").trim();
   var submittedLegal=submittedCust.toLowerCase();
+  var submittedSite=String(data.site||"").trim().toLowerCase();
   var reportDate=data.date;
   var rDateObj=new Date(reportDate);
   // Match only within the same calendar month as the report
@@ -2941,6 +2942,11 @@ function markPlannerDoneNew(data){
 
     // 1. Exact match
     if(jc===submittedLegal)matched=true;
+
+    // 1b. Site-level planner entries: the report's chosen Site/Premises
+    // matches the planner job name (e.g. planner rows "Kitchen"/"Bar" for
+    // Cap-Empire cross off when a report is submitted with that site).
+    if(!matched&&submittedSite&&jc===submittedSite)matched=true;
 
     // 2. PLAN_MAP: submitted legal name -> planner short name
     if(!matched&&typeof PLAN_MAP!=="undefined"&&PLAN_MAP[job.customer]){
