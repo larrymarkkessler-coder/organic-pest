@@ -3042,7 +3042,12 @@ function renderCalendar(){
       if(notDue){
         jDiv.style.background="#bbb";
         jDiv.style.opacity="0.55";
-        jDiv.title="Not due this month ("+freqInfo.freq+")";
+        // freqInfo can be null for planner rows not in FREQ_DATA (e.g. jobs
+        // added live via the onboarding flow) - reading .freq off null threw
+        // here and killed the WHOLE calendar render mid-loop, so every day
+        // after the offending job's date showed no jobs at all (16/07/2026:
+        // "Pretoria Laundry Site 2" on the 14th blanked days 14-31).
+        jDiv.title="Not due this month"+(freqInfo&&freqInfo.freq?" ("+freqInfo.freq+")":(job.frequency?" ("+job.frequency+")":""));
       } else {
         jDiv.style.background=TECH_COLOURS[job.techKey]||"#666";
       }
