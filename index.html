@@ -2080,9 +2080,13 @@ function addEquipRow(){
     });
   });
 
-  // Qty input
+  // Qty input - MUST carry a class. collectEquip() used to take
+  // querySelectorAll("input")[0], but the L-number feature later inserted a
+  // read-only reg-no input into the MATERIAL cell, which sits earlier in DOM
+  // order, so [0] returned the reg-no field instead of the quantity.
   var qtyInp=document.createElement("input");
   qtyInp.type="number";qtyInp.min="0";qtyInp.placeholder="0";
+  qtyInp.className="equip-qty";
   qtyInp.style.cssText="width:60px;font-size:12px";
 
   // Delete button
@@ -3412,7 +3416,11 @@ function collectQuotes(){
 function collectEquip(){
   var items=[];
   g("equip-body").querySelectorAll("tr").forEach(function(r){
-    var cat=r.querySelector(".equip-cat"),mat=r.querySelector(".equip-mat"),qty=r.querySelectorAll("input")[0];
+    var cat=r.querySelector(".equip-cat"),mat=r.querySelector(".equip-mat");
+    // .equip-qty (fall back to the number input) - NOT querySelectorAll("input")[0],
+    // which returned the read-only reg-no field and silently dropped every
+    // equipment row whose item has no L-number (36 of 37 items, incl. Red Tops).
+    var qty=r.querySelector(".equip-qty")||r.querySelector("input[type=number]");
     var meth=r.querySelector(".equip-meth");
     if(cat&&mat&&qty&&mat.value&&mat.value!=="Select item"&&qty.value)
       items.push({category:cat.value,item:mat.value,qty:qty.value,method:meth?meth.value:""});
