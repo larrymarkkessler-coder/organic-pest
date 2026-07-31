@@ -152,7 +152,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span> &nbsp;|&nbsp; <span id="clear-month-link" onclick="clearArchivedMonth()" style="cursor:pointer;text-decoration:underline;color:#f9a;display:none">Clear May reports</span></div>
 <div id="panel-form" class="panel active">
 <details class="card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span> &nbsp;<button class="bsm am" onclick="retrySyncAll()" style="font-size:9px;padding:2px 6px;vertical-align:middle">&#8635; Sync to Sheets</button></summary><div style="padding:0 12px 12px" id="rlist"><p style="color:#666;font-size:12px;padding:8px 0">No saved reports yet.</p></div></details>
-<details class="card" id="pend-card" style="margin-bottom:8px;display:none"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#8a5a00;cursor:pointer;list-style:none">&#9998; Awaiting signature <span id="pbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary><div style="padding:0 12px 12px"><p style="font-size:10px;color:#666;margin:2px 0 8px">Completed reports parked on this device until the customer representative signs them. They are <b>not</b> sent to the office until signed and submitted.</p><div id="plist"></div></div></details>
+<details class="card" id="pend-card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#8a5a00;cursor:pointer;list-style:none">&#9998; Awaiting signature <span id="pbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary><div style="padding:0 12px 12px"><p style="font-size:10px;color:#666;margin:2px 0 8px">Completed reports parked on this device until the customer representative signs them. They are <b>not</b> sent to the office until signed and submitted.</p><div id="plist"></div></div></details>
 <div class="card"><div class="chd">1. Job Details</div><div class="cbd">
 <div class="row r1"><div class="fld"><label>Planner Name <span style="color:#2d7a50;font-size:10px">(select to auto-fill customer)</span></label>
 <select id="plan-sel" onchange="onPlannerSelect(this)"><option value="">-- Select planner name --</option>
@@ -1223,7 +1223,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div class="sigbtns" id="sab"><button class="sigbtn" id="clrbtn">Clear</button><button class="sigbtn ok" id="cnfbtn" disabled>Confirm signature</button></div>
 <div class="sigconf" id="scf"><img id="sth" src="" alt="sig"><div><div>Signature captured</div><div id="sts" style="font-size:10px;color:#666;font-weight:normal"></div></div><button class="sigbtn" id="rsnbtn" style="flex:0;padding:5px 10px;margin-left:auto">Re-sign</button></div>
 </div></div></div>
-<div class="card" style="padding:14px;margin-bottom:20px"><button class="subbtn" id="subbtn">Submit and save report</button><button class="subbtn" id="parkbtn" style="background:#8a5a00;margin-top:8px">Save &amp; sign later</button><div style="font-size:10px;color:#666;margin-top:6px;text-align:center">Use &ldquo;Save &amp; sign later&rdquo; when servicing several buildings on one site &mdash; park each report, then sign them together with the customer rep.</div><div class="svst" id="svst"></div></div>
+<div class="card" style="padding:14px;margin-bottom:20px"><button class="subbtn" id="subbtn">Submit and save report</button><button class="subbtn" id="parkbtn" style="background:#8a5a00;margin-top:8px">Save &amp; sign later</button><button class="subbtn" id="gotopend" style="background:#fff6e5;color:#7a4a00;border:1.5px solid #f0a500;margin-top:8px;display:none" onclick="goToPending()">&#9998; Sign parked reports</button><div style="font-size:10px;color:#666;margin-top:6px;text-align:center">Use &ldquo;Save &amp; sign later&rdquo; when servicing several buildings on one site &mdash; park each report, then sign them together with the customer rep.</div><div class="svst" id="svst"></div></div>
 <div class="add-modal" id="sig-modal"><div class="sig-modal-box"><h3 id="sig-modal-title">Customer signature</h3><div class="sig-meta" id="sig-modal-meta"></div><div class="sig-warn">Let the customer representative review the report before signing. Tap <b>View report</b> to open the PDF.</div><button class="bsm am" id="sig-modal-view" style="margin-bottom:10px">&#128196; View report (PDF)</button><canvas class="sigpad" id="msigc"></canvas><div class="sigbtns" style="margin-top:6px"><button class="sigbtn" id="msig-clr">Clear</button></div><div class="modal-btns"><button class="modal-btn cancel" onclick="closeSigModal()">Cancel</button><button class="modal-btn save" id="msig-submit" disabled>Sign &amp; submit</button></div></div></div>
 </div>
 <div id="panel-planner" class="panel">
@@ -2652,9 +2652,23 @@ function loadPending(){
 
 function rfPending(){
   var p=loadPending(),card=g("pend-card");if(!card)return;
-  card.style.display=p.length?"":"none";
+  // The card stays visible even when empty. Hiding it meant a technician who
+  // had never parked a report could not tell the feature existed - reported
+  // by Larry 31/07/2026, who went looking for it and found nothing.
   g("pbadge").textContent="("+p.length+")";
-  if(!p.length){g("plist").innerHTML="";return;}
+  // A shortcut down at the submit button, where the technician actually is
+  // when they finish a job - the card itself is at the top of a long form.
+  var jump=g("gotopend");
+  if(jump){
+    jump.style.display=p.length?"":"none";
+    jump.textContent="✎ Sign parked reports ("+p.length+")";
+  }
+  if(!p.length){
+    g("plist").innerHTML="<p style=\"color:#666;font-size:12px;padding:6px 0\">"+
+      "Nothing awaiting signature. Use <b>Save &amp; sign later</b> at the foot of "+
+      "a completed report to park it here.</p>";
+    return;
+  }
   var h="";
   p.forEach(function(r){
     var when="";try{when=new Date(r.parkedAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});}catch(e){}
@@ -2665,6 +2679,15 @@ function rfPending(){
     h+="<button class=\"bsm\" onclick=\"delPending('"+r.reportNo+"')\">Del</button></div></div>";
   });
   g("plist").innerHTML=h;
+}
+
+/* Open the Awaiting-signature card and bring it into view. The card lives at
+   the top of a long form; the technician is at the bottom when they finish. */
+function goToPending(){
+  var card=g("pend-card");if(!card)return;
+  card.open=true;
+  try{card.scrollIntoView({behavior:"smooth",block:"start"});}
+  catch(e){card.scrollIntoView();}
 }
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
@@ -2691,7 +2714,8 @@ function parkRpt(){
     newRpt();                          // fresh form + fresh report number
     var st=g("svst");st.className="svst ok";
     st.innerHTML="Parked "+esc(parkedNo)+" for signature. Start the next report, "+
-                 "then sign them together under <b>Awaiting signature</b> at the top.";
+                 "then tap <b>Sign parked reports</b> below when the customer "+
+                 "representative is ready.";
     try{g("pend-card").open=true;}catch(e){}
   }catch(e){
     btn.disabled=false;btn.textContent="Save & sign later";
