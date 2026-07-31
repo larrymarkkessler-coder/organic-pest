@@ -110,6 +110,15 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 .modal-btn{flex:1;padding:10px;border-radius:7px;font-size:13px;font-weight:bold;cursor:pointer;border:none}
 .modal-btn.save{background:#1a5c38;color:white}
 .modal-btn.cancel{background:#f0f0ec;color:#666}
+/* Awaiting signature - reports completed on site, parked until the customer
+   rep is available to sign them all in one sitting */
+.pendbtn{background:#8a5a00;color:white;border-color:#8a5a00}
+.pend-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0ec;font-size:12px}
+.pend-row:last-child{border-bottom:none}
+.sig-modal-box{background:white;border-radius:12px;padding:18px;width:94%;max-width:520px;max-height:92vh;overflow-y:auto}
+.sig-modal-box h3{color:#1a5c38;margin-bottom:4px;font-size:14px}
+.sig-meta{font-size:11px;color:#666;margin-bottom:12px;line-height:1.5}
+.sig-warn{background:#fff6e5;border:1px solid #f0a500;border-radius:7px;padding:8px 10px;font-size:11px;color:#7a4a00;margin-bottom:10px}
 .planner-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
 /* Areas Inspected - Card Design */
 .area-card{background:#f0f4f1;border:1.5px solid #d0ddd1;border-radius:9px;padding:12px;margin-bottom:10px}
@@ -143,6 +152,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span> &nbsp;|&nbsp; <span id="clear-month-link" onclick="clearArchivedMonth()" style="cursor:pointer;text-decoration:underline;color:#f9a;display:none">Clear May reports</span></div>
 <div id="panel-form" class="panel active">
 <details class="card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span> &nbsp;<button class="bsm am" onclick="retrySyncAll()" style="font-size:9px;padding:2px 6px;vertical-align:middle">&#8635; Sync to Sheets</button></summary><div style="padding:0 12px 12px" id="rlist"><p style="color:#666;font-size:12px;padding:8px 0">No saved reports yet.</p></div></details>
+<details class="card" id="pend-card" style="margin-bottom:8px;display:none"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#8a5a00;cursor:pointer;list-style:none">&#9998; Awaiting signature <span id="pbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary><div style="padding:0 12px 12px"><p style="font-size:10px;color:#666;margin:2px 0 8px">Completed reports parked on this device until the customer representative signs them. They are <b>not</b> sent to the office until signed and submitted.</p><div id="plist"></div></div></details>
 <div class="card"><div class="chd">1. Job Details</div><div class="cbd">
 <div class="row r1"><div class="fld"><label>Planner Name <span style="color:#2d7a50;font-size:10px">(select to auto-fill customer)</span></label>
 <select id="plan-sel" onchange="onPlannerSelect(this)"><option value="">-- Select planner name --</option>
@@ -1213,7 +1223,8 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div class="sigbtns" id="sab"><button class="sigbtn" id="clrbtn">Clear</button><button class="sigbtn ok" id="cnfbtn" disabled>Confirm signature</button></div>
 <div class="sigconf" id="scf"><img id="sth" src="" alt="sig"><div><div>Signature captured</div><div id="sts" style="font-size:10px;color:#666;font-weight:normal"></div></div><button class="sigbtn" id="rsnbtn" style="flex:0;padding:5px 10px;margin-left:auto">Re-sign</button></div>
 </div></div></div>
-<div class="card" style="padding:14px;margin-bottom:20px"><button class="subbtn" id="subbtn">Submit and save report</button><div class="svst" id="svst"></div></div>
+<div class="card" style="padding:14px;margin-bottom:20px"><button class="subbtn" id="subbtn">Submit and save report</button><button class="subbtn" id="parkbtn" style="background:#8a5a00;margin-top:8px">Save &amp; sign later</button><div style="font-size:10px;color:#666;margin-top:6px;text-align:center">Use &ldquo;Save &amp; sign later&rdquo; when servicing several buildings on one site &mdash; park each report, then sign them together with the customer rep.</div><div class="svst" id="svst"></div></div>
+<div class="add-modal" id="sig-modal"><div class="sig-modal-box"><h3 id="sig-modal-title">Customer signature</h3><div class="sig-meta" id="sig-modal-meta"></div><div class="sig-warn">Let the customer representative review the report before signing. Tap <b>View report</b> to open the PDF.</div><button class="bsm am" id="sig-modal-view" style="margin-bottom:10px">&#128196; View report (PDF)</button><canvas class="sigpad" id="msigc"></canvas><div class="sigbtns" style="margin-top:6px"><button class="sigbtn" id="msig-clr">Clear</button></div><div class="modal-btns"><button class="modal-btn cancel" onclick="closeSigModal()">Cancel</button><button class="modal-btn save" id="msig-submit" disabled>Sign &amp; submit</button></div></div></div>
 </div>
 <div id="panel-planner" class="panel">
 <div class="planner-stats" id="stats"></div>
@@ -1914,7 +1925,22 @@ var reconSt={};
 var jobSt=JSON.parse(localStorage.getItem("org_jobst")||"{}");
 var isMobile=(window.innerWidth<768);
 
-function genNo(){return "ORG-"+String(Date.now()%100000).padStart(5,"0");}
+/* Date.now()%100000 wraps every 100 SECONDS, so two reports created 100s
+   apart could be issued the SAME number - and a duplicate reportNo reaching
+   the sheet double-counts that job's materials and hours in profitability
+   (10 such rows were found in the June 2026 archive). Holding several parked
+   reports at once makes a clash much more likely, so step forward until the
+   number is unused on this device. Format is unchanged: ORG-#####. */
+function genNo(){
+  var used=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  var pend=JSON.parse(localStorage.getItem("org_pending")||"{}");
+  var base=Date.now(),n;
+  for(var i=0;i<100000;i++){
+    n="ORG-"+String((base+i)%100000).padStart(5,"0");
+    if(!used[n]&&!pend[n])return n;
+  }
+  return "ORG-"+String(base%100000).padStart(5,"0");
+}
 var rNo=genNo();
 function g(id){return document.getElementById(id);}
 
@@ -2600,8 +2626,176 @@ function delRpt(rn){
   localStorage.setItem("org_rpts",JSON.stringify(a));rfRpts();
 }
 
+/* ══ AWAITING SIGNATURE ═══════════════════════════════════════════════════
+   Several buildings on one site produce several reports on the same day, and
+   the customer rep should not have to stand and wait through each one. A
+   report can be completed and PARKED here, then all of them signed together.
+
+   The parked object is exactly what collect() produced at the time the
+   technician finished the job. It is never rebuilt from the form and never
+   re-read from the DOM - the only field added later is the signature. That
+   matters: re-populating the form and re-collecting is what would silently
+   drop a field (as positional DOM lookups did with equipment rows in July).
+
+   Parked reports are LOCAL to the device and deliberately do NOT touch the
+   office: no Sheets row, no PDF, no customer email, no planner cross-off.
+   All of that happens on "Sign & submit", down the identical path as a
+   normal submission.
+   ═════════════════════════════════════════════════════════════════════════ */
+function loadPending(){
+  var a=JSON.parse(localStorage.getItem("org_pending")||"{}");
+  var out=[];for(var k in a)out.push(a[k]);
+  if(window.TECH_LOCK)out=out.filter(function(r){return r.techKey===window.TECH_LOCK;});
+  out.sort(function(x,y){return String(x.parkedAt||"").localeCompare(String(y.parkedAt||""));});
+  return out;
+}
+
+function rfPending(){
+  var p=loadPending(),card=g("pend-card");if(!card)return;
+  card.style.display=p.length?"":"none";
+  g("pbadge").textContent="("+p.length+")";
+  if(!p.length){g("plist").innerHTML="";return;}
+  var h="";
+  p.forEach(function(r){
+    var when="";try{when=new Date(r.parkedAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});}catch(e){}
+    h+="<div class=\"pend-row\"><div><div style=\"font-weight:bold;font-size:12px\">"+esc(r.customer||"Unknown")+(r.site?" &ndash; "+esc(r.site):"")+"</div>";
+    h+="<div style=\"font-size:10px;color:#666\">"+esc(r.reportNo)+" - "+esc(r.date||"")+(when?" - parked "+when:"")+"</div></div>";
+    h+="<div style=\"white-space:nowrap\"><button class=\"bsm pendbtn\" onclick=\"openSigModal('"+r.reportNo+"')\">Sign</button>";
+    h+="<button class=\"bsm\" onclick=\"pendPDF('"+r.reportNo+"')\">PDF</button>";
+    h+="<button class=\"bsm\" onclick=\"delPending('"+r.reportNo+"')\">Del</button></div></div>";
+  });
+  g("plist").innerHTML=h;
+}
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
+
+/* Park the current report: complete in every respect except the signature. */
+function parkRpt(){
+  var errors=validateReport(false);
+  if(errors.length){
+    alert("A report can only be parked once it is otherwise complete.\n\nPlease finish the following:\n\n"+
+          errors.map(function(e,i){return (i+1)+". "+e;}).join("\n"));
+    return;
+  }
+  var btn=g("parkbtn");btn.disabled=true;btn.textContent="Saving...";
+  try{
+    var d=collect();
+    d.signatureData=null;              // signature is captured later, by the rep
+    d.parkedAt=new Date().toISOString();
+    var a=JSON.parse(localStorage.getItem("org_pending")||"{}");
+    if(a[d.reportNo])throw new Error("Report "+d.reportNo+" is already awaiting signature");
+    a[d.reportNo]=d;localStorage.setItem("org_pending",JSON.stringify(a));
+    var parkedNo=d.reportNo;
+    rfPending();
+    newRpt();                          // fresh form + fresh report number
+    var st=g("svst");st.className="svst ok";
+    st.innerHTML="Parked "+esc(parkedNo)+" for signature. Start the next report, "+
+                 "then sign them together under <b>Awaiting signature</b> at the top.";
+    try{g("pend-card").open=true;}catch(e){}
+  }catch(e){
+    btn.disabled=false;btn.textContent="Save & sign later";
+    g("svst").className="svst er";g("svst").textContent="Could not park report: "+e.message;
+  }
+}
+
+function delPending(rn){
+  if(!confirm("Discard "+rn+"?\n\nThis report has NOT been signed or sent to the office. "+
+              "It will be permanently deleted from this device and will have to be redone."))return;
+  var a=JSON.parse(localStorage.getItem("org_pending")||"{}");delete a[rn];
+  localStorage.setItem("org_pending",JSON.stringify(a));rfPending();
+}
+
+/* Unsigned preview, so the rep can read the report before signing it. */
+function pendPDF(rn){
+  try{
+    var a=JSON.parse(localStorage.getItem("org_pending")||"{}"),d=a[rn];
+    if(!d){alert("Report not found");return;}
+    var doc=buildPDF(d);if(!doc){alert("PDF library not loaded. Please refresh.");return;}
+    doc.save("UNSIGNED_Service_Report_"+d.reportNo+".pdf");
+  }catch(e){alert("PDF error: "+e.message);}
+}
+
+/* ── signature modal (its own pad; the section 9 pad stays bound to sigD) ── */
+var mSigCanvas=null,mSigCtx=null,mSigDrew=false,mSigDrawing=false,mSigFor=null;
+function initMSig(){
+  if(mSigCanvas)return;
+  mSigCanvas=g("msigc");if(!mSigCanvas)return;mSigCtx=mSigCanvas.getContext("2d");
+  function gp(e){var r=mSigCanvas.getBoundingClientRect();
+    return e.touches?{x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top}
+                    :{x:e.clientX-r.left,y:e.clientY-r.top};}
+  function mk(){if(!mSigDrew){mSigDrew=true;mSigCanvas.classList.add("signed");
+    g("msig-submit").disabled=false;}}
+  mSigCanvas.addEventListener("mousedown",function(e){mSigDrawing=true;var p=gp(e);mSigCtx.beginPath();mSigCtx.moveTo(p.x,p.y);});
+  mSigCanvas.addEventListener("mousemove",function(e){if(!mSigDrawing)return;var p=gp(e);mSigCtx.lineTo(p.x,p.y);mSigCtx.stroke();mk();});
+  mSigCanvas.addEventListener("mouseup",function(){mSigDrawing=false;});
+  mSigCanvas.addEventListener("mouseleave",function(){mSigDrawing=false;});
+  mSigCanvas.addEventListener("touchstart",function(e){e.preventDefault();mSigDrawing=true;var p=gp(e);mSigCtx.beginPath();mSigCtx.moveTo(p.x,p.y);},{passive:false});
+  mSigCanvas.addEventListener("touchmove",function(e){e.preventDefault();if(!mSigDrawing)return;var p=gp(e);mSigCtx.lineTo(p.x,p.y);mSigCtx.stroke();mk();},{passive:false});
+  mSigCanvas.addEventListener("touchend",function(){mSigDrawing=false;});
+  g("msig-clr").onclick=function(){clrMSig();};
+  g("msig-submit").onclick=function(){submitPending();};
+}
+function sizeMSig(){
+  var dpr=window.devicePixelRatio||1,w=mSigCanvas.offsetWidth||480;
+  mSigCanvas.width=w*dpr;mSigCanvas.height=130*dpr;
+  mSigCanvas.style.width=w+"px";mSigCanvas.style.height="130px";
+  mSigCtx.scale(dpr,dpr);mSigCtx.strokeStyle="#1a2e1a";mSigCtx.lineWidth=1.8;
+  mSigCtx.lineCap="round";mSigCtx.lineJoin="round";
+}
+function clrMSig(){
+  if(!mSigCtx)return;var dpr=window.devicePixelRatio||1;
+  mSigCtx.clearRect(0,0,mSigCanvas.width/dpr,mSigCanvas.height/dpr);
+  mSigDrew=false;mSigCanvas.classList.remove("signed");g("msig-submit").disabled=true;
+}
+function openSigModal(rn){
+  var a=JSON.parse(localStorage.getItem("org_pending")||"{}"),d=a[rn];
+  if(!d){alert("Report not found");return;}
+  mSigFor=rn;initMSig();
+  g("sig-modal-meta").innerHTML=
+    "<b>"+esc(d.customer||"")+"</b>"+(d.site?" &ndash; "+esc(d.site):"")+"<br>"+
+    esc(d.reportNo)+" &middot; "+esc(d.date||"")+" &middot; "+esc(d.techName||"")+"<br>"+
+    "Signing on behalf of the customer: <b>"+esc(d.custConfirm||"")+"</b>";
+  g("sig-modal-view").onclick=function(){pendPDF(rn);};
+  g("msig-submit").textContent="Sign & submit";g("msig-submit").disabled=true;
+  g("sig-modal").classList.add("show");
+  sizeMSig();clrMSig();
+}
+function closeSigModal(){
+  g("sig-modal").classList.remove("show");mSigFor=null;clrMSig();
+}
+
+/* Runs the SAME pipeline as doSubmit - Sheets sync, planner cross-off,
+   reconciliation, Drive upload and customer email all happen here and
+   nowhere earlier. */
+function submitPending(){
+  if(!mSigFor||!mSigDrew)return;
+  var btn=g("msig-submit");btn.disabled=true;btn.textContent="Submitting...";
+  try{
+    var a=JSON.parse(localStorage.getItem("org_pending")||"{}"),d=a[mSigFor];
+    if(!d)throw new Error("Report is no longer in the pending list");
+    d.signatureData=mSigCanvas.toDataURL("image/png");
+    d.submittedAt=new Date().toISOString();   // the PDF prints this as "Signed:"
+    delete d.parkedAt;
+    saveRpt(d);markPlannerDoneNew(d);updateReconFromRpt(d);
+    delete a[mSigFor];localStorage.setItem("org_pending",JSON.stringify(a));
+    var doneNo=d.reportNo;
+    rfRpts();rfPending();closeSigModal();
+    setTimeout(function(){uploadPDFtoDrive(doneNo);},1500);
+    var st=g("svst");st.className="svst ok";
+    st.innerHTML="Submitted "+esc(doneNo)+" <button class=\"pbtn\" onclick=\"dlPDF('"+doneNo+"')\">Download PDF</button>";
+  }catch(e){
+    btn.disabled=false;btn.textContent="Sign & submit";
+    alert("Could not submit: "+e.message+"\n\nThe report is still awaiting signature and has not been lost.");
+  }
+}
+
 /* ── VALIDATION & SUBMIT ── */
-function doSubmit(){
+/* Shared by "Submit and save report" and "Save & sign later".
+   requireSig is false only when parking a report for later signature -
+   every other rule still applies, so a parked report is a COMPLETE report
+   that is missing nothing but the signature. */
+function validateReport(requireSig){
   var errors=[];
   if(!selC) errors.push("Customer name must be selected");
   if(g("cs").value==="NEW"&&!g("new-cust-name").value.trim()) errors.push("Please enter the new customer name");
@@ -2631,11 +2825,16 @@ function doSubmit(){
   if(g("fusel").value==="Yes"&&!g("fudt").value) errors.push("Follow-up anticipated date must be entered");
   if(!g("tsel").value) errors.push("Technician must be selected");
   if(!g("ccnf").value.trim()) errors.push("Customer confirmation name must be printed");
-  if(!sigD) errors.push("Customer signature must be captured and confirmed");
+  if(requireSig&&!sigD) errors.push("Customer signature must be captured and confirmed");
   var custEmail=g("cust-email").value.trim();
   var custCell2=g("cust-cell")?g("cust-cell").value.trim():"";
   if(!custEmail&&!custCell2) errors.push("Please enter either a customer email address or cell number in Section 8");
   else if(custEmail&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(custEmail)) errors.push("Customer contact email address is not valid");
+  return errors;
+}
+
+function doSubmit(){
+  var errors=validateReport(true);
   if(errors.length){
     alert("Please complete the following before submitting:\n\n"+errors.map(function(e,i){return (i+1)+". "+e;}).join("\n"));
     return;
@@ -2687,6 +2886,7 @@ function newRpt(){
     if(syncBtn)syncBtn.style.display="none";
   }
   g("subbtn").textContent="Submit and save report";g("subbtn").disabled=false;localStorage.removeItem("org_pdf_done");g("subbtn").onclick=doSubmit;
+  if(g("parkbtn")){g("parkbtn").textContent="Save & sign later";g("parkbtn").disabled=false;g("parkbtn").onclick=parkRpt;}
   g("svst").textContent="";window.scrollTo(0,0);
 }
 
@@ -3813,6 +4013,7 @@ g("cs").addEventListener("change",function(){
   g("tsel").addEventListener("change",function(){g("preg").value=this.value||"";});
   g("fusel").addEventListener("change",function(){g("fu-row").style.display=this.value==="Yes"?"block":"none";});
   g("addbtn").addEventListener("click",addArea);g("subbtn").onclick=doSubmit;
+  if(g("parkbtn"))g("parkbtn").onclick=parkRpt;
   g("clrbtn").addEventListener("click",clrSig);g("cnfbtn").addEventListener("click",cnfSig);
   g("rsnbtn").addEventListener("click",function(){sigD=null;clrSig();});
   // Wire reg-no-field for static device row material selects in dbody
@@ -3821,7 +4022,7 @@ g("cs").addEventListener("change",function(){
     ms.parentNode.appendChild(regInp);
     ms.addEventListener("change",function(){var rn=getRegNo(ms.value);regInp.value=rn;regInp.classList.toggle("has-reg",!!rn);});
   });
-  initSig();areaCnt=0;addArea();rfRpts();setTimeout(function(){addILTRow();},100);
+  initSig();areaCnt=0;addArea();rfRpts();rfPending();setTimeout(function(){addILTRow();},100);
   setTimeout(syncFromSheets,1500);
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
   setTimeout(retrySyncPending,3000);
