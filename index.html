@@ -2926,18 +2926,18 @@ function buildPDF(data){
   function cbR(all3,ck){var cw=CW/all3.length;doc.setFillColor(GL[0],GL[1],GL[2]);doc.rect(M,y,CW,7,"F");all3.forEach(function(item,i){var x=M+i*cw;var ic=ck.indexOf(item)>=0;doc.setFillColor(W3[0],W3[1],W3[2]);doc.setDrawColor(G[0],G[1],G[2]);doc.setLineWidth(0.4);doc.rect(x+2,y+1.5,4,4,ic?"FD":"S");if(ic){doc.setFillColor(G[0],G[1],G[2]);doc.rect(x+2.8,y+2.3,2.4,2.4,"F");}doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(6.5);doc.setFont("helvetica","normal");doc.text(item,x+7,y+5);});y+=7;}
   function tbl(hdrs,cws2,rows2,min2){min2=min2||4;var cwss=cws2.map(function(f){return CW*f;});doc.setFillColor(G[0],G[1],G[2]);doc.rect(M,y,CW,5.5,"F");var x=M;hdrs.forEach(function(h2,i){doc.setTextColor(W3[0],W3[1],W3[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text(h2,x+1,y+4);x+=cwss[i];});y+=5.5;
 // No padding rows - print only actual data
-rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1],bg[2]);doc.rect(M,y,CW,5.5,"F");doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.2);doc.rect(M,y,CW,5.5,"S");var x=M;row.forEach(function(cell,ci){doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(6.5);doc.setFont("helvetica","normal");doc.text(String(cell||"").substring(0,Math.floor(cwss[ci]/1.9)),x+1,y+4);x+=cwss[ci];});y+=5.5;});y+=2;}
+rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1],bg[2]);doc.rect(M,y,CW,5.5,"F");doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.2);doc.rect(M,y,CW,5.5,"S");var x=M;row.forEach(function(cell,ci){doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFont("helvetica","normal");var txt=String(cell||"");var avail=cwss[ci]-1.5;var fs=6.5,per=1.9;if(txt.length>Math.floor(avail/per)){fs=Math.max(4.6,6.5*avail/(txt.length*1.9));per=1.9*fs/6.5;}doc.setFontSize(fs);doc.text(txt.substring(0,Math.floor(avail/per)),x+1,y+4);doc.setFontSize(6.5);x+=cwss[ci];});y+=5.5;});y+=2;}
   sH("1.  JOB DETAILS");
   fR([["Customer",data.customer,0.55],["Date",data.date,0.2],["Time in",data.timeIn,0.125],["Time out",data.timeOut,0.125]]);
   fR([["Address",data.address,0.55],["PCO Zone",data.zone,0.28],["PCO Code",data.pco,0.17]]);
   fR([["Service description",data.serviceDescription,0.5],["Frequency",data.serviceFrequency,0.5]]);
   sH("2.  PURPOSE OF TREATMENT");cbR(["Cockroaches","Rats/Mice","Flies","Ants","SPI","Other"],data.purposes||[]);
   sH("3.  AREAS INSPECTED");
-  var ar=[];(data.areas||[]).forEach(function(a){ar.push([a.area,a.car,a.pests,a.activity,(a.material||"").substring(0,20),a.qty,a.unit,a.method||"",a.lnumber||""]);});
-  tbl(["Area","CAR","Pests","Act.","Material","Qty","Unit","Method","Reg.No."],[0.22,0.07,0.07,0.07,0.20,0.07,0.09,0.11,0.10],ar,1);
+  var ar=[];(data.areas||[]).forEach(function(a){ar.push([a.area,a.car,a.pests,a.activity,(a.material||"").substring(0,48),a.qty,a.unit,a.method||"",a.lnumber||""]);});
+  tbl(["Area","CAR","Pests","Act.","Material","Qty","Unit","Method","Reg.No."],[0.16,0.06,0.06,0.06,0.37,0.07,0.07,0.07,0.08],ar,1);
   sH("4.  PEST DEVICES");
-  var dr=[];(data.devices||[]).forEach(function(d2){var qos=parseFloat(d2.qty_on_site||0);var qus=parseFloat(d2.qty_used||0);var hasData=qos>0||qus>0||(d2.material&&d2.material!=="Select material"&&d2.material!=="")||(d2.activity&&d2.activity!=="--");if(hasData)dr.push([(d2.device||"").substring(0,35),d2.qty_on_site,d2.car,d2.pests,d2.activity,(d2.material||"").substring(0,16),d2.qty_used,d2.unit,d2.method,d2.lnumber||""]);});
-  tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],[0.30,0.06,0.04,0.06,0.05,0.18,0.06,0.08,0.07,0.10],dr,1);
+  var dr=[];(data.devices||[]).forEach(function(d2){var qos=parseFloat(d2.qty_on_site||0);var qus=parseFloat(d2.qty_used||0);var hasData=qos>0||qus>0||(d2.material&&d2.material!=="Select material"&&d2.material!=="")||(d2.activity&&d2.activity!=="--");if(hasData)dr.push([(d2.device||"").substring(0,35),d2.qty_on_site,d2.car,d2.pests,d2.activity,(d2.material||"").substring(0,48),d2.qty_used,d2.unit,d2.method,d2.lnumber||""]);});
+  tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],[0.18,0.05,0.04,0.05,0.05,0.37,0.06,0.06,0.06,0.08],dr,1);
   // Section 5: Equipment Installed
   var eqRows=[];(data.equipment||[]).forEach(function(eq){
     if(eq.item) eqRows.push([eq.category||"",eq.item,eq.qty||"",eq.method||""]);
