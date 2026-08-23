@@ -2909,7 +2909,8 @@ function newRpt(){
 }
 
 /* ── PDF ── */
-function buildPDF(data){
+function buildPDF(data){return buildPDF_(data,0);}
+function buildPDF_(data,SC){
   var jsPDF=window.jspdf&&window.jspdf.jsPDF;if(!jsPDF)return null;
   var doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
   var W=210,H=297,M=10,CW=W-2*M,G=[26,92,56],GL=[240,244,241],W3=[255,255,255],DK=[26,26,24],GR=[221,221,216];
@@ -2920,13 +2921,13 @@ function buildPDF(data){
   var bx=W-M-38;doc.setDrawColor(W3[0],W3[1],W3[2]);doc.setLineWidth(0.4);doc.roundedRect(bx,2,38,15,2,2,"S");
   doc.setFontSize(5);doc.text("SERVICE REPORT",bx+19,8,{align:"center"});
   doc.setFontSize(9);doc.setFont("helvetica","bold");doc.text("No. "+data.reportNo,bx+19,14,{align:"center"});
-  var y=21;
-  function sH(t){doc.setFillColor(G[0],G[1],G[2]);doc.rect(M,y,CW,4.5,"F");doc.setTextColor(W3[0],W3[1],W3[2]);doc.setFontSize(6);doc.setFont("helvetica","bold");doc.text(t,M+2,y+3.3);y+=5.5;}
-  function fR(flds,h){h=h||10;var x=M;flds.forEach(function(f){var fw=CW*f[2];doc.setFillColor(GL[0],GL[1],GL[2]);doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);doc.rect(x,y,fw-0.5,h,"FD");if(f[0]){doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(6);doc.setFont("helvetica","bold");doc.text(f[0].toUpperCase(),x+1.5,y+3.5);}doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(8);doc.setFont("helvetica","normal");doc.text(String(f[1]||"").substring(0,Math.floor(fw/2.2)),x+1.5,y+h-2.8);x+=fw;});y+=h+1;}
+  var y=21;var SF=SC||1;function VS(v){return v*SF;}
+  function sH(t){doc.setFillColor(G[0],G[1],G[2]);doc.rect(M,y,CW,VS(4.5),"F");doc.setTextColor(W3[0],W3[1],W3[2]);doc.setFontSize(6);doc.setFont("helvetica","bold");doc.text(t,M+2,y+VS(3.3));y+=VS(5.5);}
+  function fR(flds,h){h=VS(h||10);var x=M;flds.forEach(function(f){var fw=CW*f[2];doc.setFillColor(GL[0],GL[1],GL[2]);doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);doc.rect(x,y,fw-0.5,h,"FD");if(f[0]){doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(6);doc.setFont("helvetica","bold");doc.text(f[0].toUpperCase(),x+1.5,y+3.5);}doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(8);doc.setFont("helvetica","normal");doc.text(String(f[1]||"").substring(0,Math.floor(fw/2.2)),x+1.5,y+h-2.8);x+=fw;});y+=h+1;}
   function cbR(all3,ck){var cw=CW/all3.length;doc.setFillColor(GL[0],GL[1],GL[2]);doc.rect(M,y,CW,7,"F");all3.forEach(function(item,i){var x=M+i*cw;var ic=ck.indexOf(item)>=0;doc.setFillColor(W3[0],W3[1],W3[2]);doc.setDrawColor(G[0],G[1],G[2]);doc.setLineWidth(0.4);doc.rect(x+2,y+1.5,4,4,ic?"FD":"S");if(ic){doc.setFillColor(G[0],G[1],G[2]);doc.rect(x+2.8,y+2.3,2.4,2.4,"F");}doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(6.5);doc.setFont("helvetica","normal");doc.text(item,x+7,y+5);});y+=7;}
-  function tbl(hdrs,cws2,rows2,min2){min2=min2||4;var cwss=cws2.map(function(f){return CW*f;});doc.setFillColor(G[0],G[1],G[2]);doc.rect(M,y,CW,5.5,"F");var x=M;hdrs.forEach(function(h2,i){doc.setTextColor(W3[0],W3[1],W3[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text(h2,x+1,y+4);x+=cwss[i];});y+=5.5;
+  function tbl(hdrs,cws2,rows2,min2){min2=min2||4;var cwss=cws2.map(function(f){return CW*f;});doc.setFillColor(G[0],G[1],G[2]);doc.rect(M,y,CW,VS(5.5),"F");var x=M;hdrs.forEach(function(h2,i){doc.setTextColor(W3[0],W3[1],W3[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text(h2,x+1,y+VS(4));x+=cwss[i];});y+=VS(5.5);
 // No padding rows - print only actual data
-rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1],bg[2]);doc.rect(M,y,CW,5.5,"F");doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.2);doc.rect(M,y,CW,5.5,"S");var x=M;row.forEach(function(cell,ci){doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFont("helvetica","normal");var txt=String(cell||"");var avail=cwss[ci]-1.5;var fs=6.5,per=1.9;if(txt.length>Math.floor(avail/per)){fs=Math.max(4.6,6.5*avail/(txt.length*1.9));per=1.9*fs/6.5;}doc.setFontSize(fs);doc.text(txt.substring(0,Math.floor(avail/per)),x+1,y+4);doc.setFontSize(6.5);x+=cwss[ci];});y+=5.5;});y+=2;}
+rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1],bg[2]);doc.rect(M,y,CW,5.5,"F");doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.2);doc.rect(M,y,CW,VS(5.5),"S");var x=M;row.forEach(function(cell,ci){doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFont("helvetica","normal");var txt=String(cell||"");var avail=cwss[ci]-1.5;var fs=6.5,per=1.9;if(txt.length>Math.floor(avail/per)){fs=Math.max(4.6,6.5*avail/(txt.length*1.9));per=1.9*fs/6.5;}doc.setFontSize(fs);doc.text(txt.substring(0,Math.floor(avail/per)),x+1,y+VS(4));doc.setFontSize(6.5);x+=cwss[ci];});y+=VS(5.5);});y+=VS(2);}
   sH("1.  JOB DETAILS");
   fR([["Customer",data.customer,0.55],["Date",data.date,0.2],["Time in",data.timeIn,0.125],["Time out",data.timeOut,0.125]]);
   fR([["Address",data.address,0.55],["PCO Zone",data.zone,0.28],["PCO Code",data.pco,0.17]]);
@@ -2966,7 +2967,11 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   fR([["Cash collected",data.cash||"",0.4],["Action reports outstanding",data.actionReports||"",0.6]]);
   fR([["Follow-up required",data.followUp,0.22],["Anticipated date",data.followUpDate,0.25],["Technician",data.techName,0.30],["PCO Reg No.",data.pcoReg,0.23]]);
   fR([["Contact email",data.custEmail||"",0.65],["Contact cell",data.custCell||"",0.35]]);
-  var sh=36,sy=y;
+  // The signature block is the natural place for slack to go - a bigger
+  // box is where a technician actually needs room. It must also be
+  // COUNTED: it was a fixed 36mm outside the measurement, so the scale
+  // came out too large and pushed the block off the page.
+  var sh=VS(36),sy=y;y+=sh;
   doc.setFillColor(GL[0],GL[1],GL[2]);doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);doc.rect(M,sy,CW*0.49,sh,"FD");
   doc.setTextColor(G[0],G[1],G[2]);doc.setFontSize(5.5);doc.setFont("helvetica","bold");doc.text("CUSTOMER NAME",M+1.5,sy+4);
   doc.setTextColor(DK[0],DK[1],DK[2]);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text(data.custConfirm||"",M+1.5,sy+16);
@@ -2979,6 +2984,20 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   doc.text("IN CASE OF EMERGENCY: Tygerberg Medical School Pharmacology Dept (021) 931 6129",M,H-8);
   doc.setFont("helvetica","normal");doc.setFontSize(6);doc.text("The National Poison Information Centre is the only 24hr Poison Centre in South Africa.",M,H-4);
   doc.setFont("helvetica","bold");doc.setFontSize(7);doc.text("Thank You!",W-M,H-6,{align:"right"});
+  if(!SC){
+    // How tall did it come out, and how tall may it be? The footer band
+    // occupies the last 14mm, and the body starts at 21mm.
+    var avail=(H-14)-21, natural=y-21;
+    var f=natural>0?avail/natural:1;
+    // 2.0 stops a nearly-empty report being inflated into something absurd;
+    // 0.72 is the point below which the text stops being readable, and a
+    // report that still does not fit needs a SECOND PAGE rather than more
+    // shrinking. buildPDF has no pagination today - see the incident log -
+    // so such a report is left at 0.72 and will overflow visibly rather
+    // than silently. No issued report has reached that point.
+    f=Math.max(0.72,Math.min(2.0,f));
+    if(Math.abs(f-1)>0.02)return buildPDF_(data,f);
+  }
   return doc;
 }
 
