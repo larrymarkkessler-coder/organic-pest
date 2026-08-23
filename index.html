@@ -1192,7 +1192,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <tbody id="equip-body"></tbody></table>
 <button class="addb" id="equip-addbtn" onclick="addEquipRow()">+ Add item</button>
 </div></div>
-<div class="card"><div class="chd">6. Recommendations</div><div class="cbd" style="overflow-x:auto">
+<div class="card"><div class="chd">6. Observations and Recommendations</div><div class="cbd" style="overflow-x:auto">
 <table style="width:100%"><thead><tr><th style="width:130px">Type</th><th>Recommendation</th><th style="width:30px"></th></tr></thead>
 <tbody id="rec-body"></tbody></table>
 <button class="addb" onclick="addRecRow()">+ Add recommendation</button>
@@ -2417,7 +2417,8 @@ function collect(){
       qty_on_site:dons?dons.value:"",car:dcar?dcar.value:"",pests:pestVal,
       activity:dact?dact.value:"",material:dm?dm.value:"",
       qty_used:dqty?dqty.value:"",unit:dunit?dunit.value:"",
-      method:dmeth?dmeth.value:"",lnumber:dm?getRegNo(dm.value):""});
+      method:dmeth?dmeth.value:"",lnumber:dm?getRegNo(dm.value):"",
+      activity_traps:trapsOf(r)});
   });
   // Collect ILT rows from container
   var iltTbody=document.getElementById("ilt-tbody");
@@ -2432,7 +2433,8 @@ function collect(){
         qty_on_site:dons?dons.value:"",car:dcar?dcar.value:"",pests:"F",
         activity:dact?dact.value:"",material:dm?dm.value:"",
         qty_used:dqty?dqty.value:"",unit:dunit?dunit.value:"",
-        method:dmeth?dmeth.value:"",lnumber:dm?getRegNo(dm.value):""});
+        method:dmeth?dmeth.value:"",lnumber:dm?getRegNo(dm.value):"",
+        activity_traps:trapsOf(row)});
     });
   }
   var tr2=g("tsel").value;
@@ -2890,6 +2892,9 @@ function newRpt(){
   g("abody").innerHTML="";areaCnt=0;addArea();var iltc=document.getElementById("ilt-tbody");if(iltc){iltc.innerHTML="";iltCount=0;addILTRow();}clrSig();
   // Reset static device rows in dbody — target each class directly
   document.querySelectorAll("#dbody .dons,#dbody .dcar,#dbody .dqty").forEach(function(el){el.value="";});
+  document.querySelectorAll("#dbody tr.trapno-row").forEach(function(el){
+    if(el.parentNode)el.parentNode.removeChild(el);
+  });
   document.querySelectorAll("#dbody .dact,#dbody .dmat,#dbody .dunit,#dbody .dmeth").forEach(function(el){el.selectedIndex=0;});
   document.querySelectorAll(".reg-no-field").forEach(function(f){f.value="";f.classList.remove("has-reg");});
   // Reset equipment rows
@@ -2939,6 +2944,11 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   sH("4.  PEST DEVICES");
   var dr=[];(data.devices||[]).forEach(function(d2){var qos=parseFloat(d2.qty_on_site||0);var qus=parseFloat(d2.qty_used||0);var hasData=qos>0||qus>0||(d2.material&&d2.material!=="Select material"&&d2.material!=="")||(d2.activity&&d2.activity!=="--");if(hasData)dr.push([(d2.device||"").substring(0,35),d2.qty_on_site,d2.car,d2.pests,d2.activity,(d2.material||"").substring(0,48),d2.qty_used,d2.unit,d2.method,d2.lnumber||""]);});
   tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],[0.18,0.05,0.04,0.05,0.05,0.37,0.06,0.06,0.06,0.08],dr,1);
+  var trapRows=[];(data.devices||[]).forEach(function(d3){
+    if(d3.activity_traps&&d3.activity_traps.length)
+      trapRows.push([d3.device||"",d3.activity_traps.join(", ")]);
+  });
+  if(trapRows.length)tbl(["Device","Activity Trap No."],[0.34,0.66],trapRows,1);
   // Section 5: Equipment Installed
   var eqRows=[];(data.equipment||[]).forEach(function(eq){
     if(eq.item) eqRows.push([eq.category||"",eq.item,eq.qty||"",eq.method||""]);
@@ -2947,10 +2957,25 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
     sH("5.  EQUIPMENT INSTALLED / CONSUMABLES USED");
     tbl(["Category","Item","Qty","Method"],[0.22,0.55,0.10,0.13],eqRows,2);
   }
-  sH("6.  RECOMMENDATIONS");
+  sH("6.  OBSERVATIONS AND RECOMMENDATIONS");
   var recs=data.recommendations||[];
   if(!recs.length)recs=[{type:"",notes:""}];
-  var recRows=recs.map(function(r){return[r.type||"",r.notes||""];});
+  // One line per device - concatenating them into a single cell overflowed
+  // the column and was silently clipped.
+  var recRows=[];
+  recs.forEach(function(r){
+    var lines=[];
+    (r.devices||[]).forEach(function(d4){
+      var bits=[d4.deviceType,d4.failureType].filter(function(x){return x;}).join(" - ");
+      if(d4.deviceNos&&d4.deviceNos.length)bits+=" (No. "+d4.deviceNos.join(", ")+")";
+      if(bits)lines.push(bits);
+    });
+    if(r.notes)lines.push(r.notes);
+    if(r.photos&&r.photos.length)
+      lines.push("["+r.photos.length+" photo"+(r.photos.length>1?"s":"")+" attached]");
+    if(!lines.length)lines.push("");
+    lines.forEach(function(ln,i){recRows.push([i===0?(r.type||""):"",ln]);});
+  });
   while(recRows.length<3)recRows.push(["",""]);
   tbl(["Type","Recommendation"],[0.22,0.78],recRows,3);
   // Quotations section
@@ -2997,6 +3022,39 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
     // than silently. No issued report has reached that point.
     f=Math.max(0.72,Math.min(2.0,f));
     if(Math.abs(f-1)>0.02)return buildPDF_(data,f);
+  }
+  // Photographs ride to Drive inside the PDF: the Reports sheet has no column
+  // for them, so this is their only durable home. They go on a page of their
+  // own so the one-page service record above is left exactly as it was.
+  var shots=[];
+  (data.recommendations||[]).forEach(function(r){
+    (r.photos||[]).forEach(function(p){
+      var cap=(r.devices||[]).map(function(d5){
+        var b=[d5.deviceType,d5.failureType].filter(function(x){return x;}).join(" - ");
+        if(d5.deviceNos&&d5.deviceNos.length)b+=" (No. "+d5.deviceNos.join(", ")+")";
+        return b;
+      }).filter(function(x){return x;}).join("; ");
+      shots.push({uri:p,cap:cap||r.notes||r.type||""});
+    });
+  });
+  if(shots.length){
+    doc.addPage();
+    doc.setFillColor(G[0],G[1],G[2]);doc.rect(M,12,CW,5,"F");
+    doc.setTextColor(W3[0],W3[1],W3[2]);
+    doc.setFontSize(7);doc.setFont("helvetica","bold");
+    doc.text("SITE PHOTOGRAPHS - "+(data.reportNo||""),M+2,15.6);
+    var pw=(CW-6)/2, ph=52;
+    shots.forEach(function(sh2,i){
+      var col=i%2, row=Math.floor(i/2);
+      var px=M+col*(pw+6), py=20+row*(ph+13);
+      if(py+ph>H-16)return;   // anything beyond the page is left out
+      try{doc.addImage(sh2.uri,"JPEG",px,py,pw,ph,undefined,"FAST");}catch(e){}
+      doc.setDrawColor(GR[0],GR[1],GR[2]);doc.setLineWidth(0.3);
+      doc.rect(px,py,pw,ph);
+      doc.setTextColor(40,40,40);
+      doc.setFontSize(6);doc.setFont("helvetica","normal");
+      doc.text(doc.splitTextToSize(sh2.cap||"",pw).slice(0,2),px,py+ph+3.5);
+    });
   }
   return doc;
 }
@@ -3555,12 +3613,180 @@ function updReconRow(el,code){
 /* ── INIT ── */
 
 
+// ---- Activity trap numbers and device observations -----------------------
+// A 1-300 dropdown that keeps a removable chip per selection, so the
+// technician can pick several numbers without a 300-row multi-select.
+var DEVNO_MAX=300;
+function makeNumPicker(ph){
+  var wrap=document.createElement("span");
+  wrap.style.cssText="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap";
+  var sel=document.createElement("select");
+  sel.className="num-pick";sel.style.cssText="font-size:12px";
+  var o0=document.createElement("option");o0.value="";o0.textContent=ph;
+  sel.appendChild(o0);
+  for(var i=1;i<=DEVNO_MAX;i++){
+    var o=document.createElement("option");o.value=String(i);o.textContent=String(i);
+    sel.appendChild(o);
+  }
+  var chips=document.createElement("span");chips.className="num-chips";
+  chips.style.cssText="display:inline-flex;gap:4px;flex-wrap:wrap";
+  sel.onchange=function(){
+    var v=sel.value;sel.selectedIndex=0;
+    if(!v||getNums(wrap).indexOf(v)>=0)return;
+    var c=document.createElement("span");
+    c.className="num-chip";c.setAttribute("data-n",v);
+    c.title="Tap to remove";
+    c.style.cssText="background:#e4f2e4;color:#1a5c38;border:1px solid #b9d6c2;"+
+      "border-radius:9px;padding:1px 7px;font-size:11px;font-weight:bold;cursor:pointer";
+    c.textContent=v+" \u00d7";
+    c.onclick=function(){if(c.parentNode)c.parentNode.removeChild(c);};
+    chips.appendChild(c);
+  };
+  wrap.appendChild(sel);wrap.appendChild(chips);
+  return wrap;
+}
+function getNums(scope){
+  var out=[];
+  if(!scope)return out;
+  scope.querySelectorAll(".num-chip").forEach(function(c){
+    out.push(c.getAttribute("data-n"));
+  });
+  return out.sort(function(a,b){return (a-b);});
+}
+// Section 4: reveal "Activity Trap No." only when activity is L, M or H.
+function syncTrapRow(tr){
+  var sel=tr.querySelector(".dact");
+  if(!sel)return;
+  var need=["L","M","H"].indexOf(sel.value)>=0;
+  var nx=tr.nextElementSibling;
+  var has=nx&&nx.className==="trapno-row";
+  if(need&&!has){
+    var r=document.createElement("tr");r.className="trapno-row";
+    var td=document.createElement("td");
+    td.colSpan=tr.cells?tr.cells.length:8;
+    td.style.cssText="padding:5px 8px;background:#f4f9f6;border-bottom:1px solid #e6ede8";
+    var lab=document.createElement("span");
+    lab.textContent="Activity Trap No.";
+    lab.style.cssText="font-size:11px;font-weight:bold;color:#1a5c38;margin-right:8px";
+    td.appendChild(lab);
+    td.appendChild(makeNumPicker("Select trap no."));
+    r.appendChild(td);
+    tr.parentNode.insertBefore(r,tr.nextSibling);
+  }else if(!need&&has){
+    nx.parentNode.removeChild(nx);
+  }
+}
+function trapsOf(r){
+  var nx=r.nextElementSibling;
+  return (nx&&nx.className==="trapno-row")?getNums(nx):[];
+}
+document.addEventListener("change",function(e){
+  var t=e.target;
+  if(t&&t.classList&&t.classList.contains("dact")){
+    var tr=t.closest?t.closest("tr"):null;
+    if(tr)syncTrapRow(tr);
+  }
+});
+// Section 6: the Devices observation panel.
+function makeDevBlock(){
+  var d=document.createElement("div");d.className="dev-blk";
+  d.style.cssText="border-top:1px dashed #cfe0d5;padding:5px 0;display:flex;"+
+    "flex-wrap:wrap;gap:6px;align-items:center";
+  function mk(cls,ph,opts){
+    var sl=document.createElement("select");sl.className=cls;
+    sl.style.cssText="font-size:12px";
+    var o0=document.createElement("option");o0.value="";o0.textContent=ph;
+    sl.appendChild(o0);
+    opts.forEach(function(t){
+      var o=document.createElement("option");o.textContent=t;sl.appendChild(o);
+    });
+    return sl;
+  }
+  d.appendChild(mk("dev-type","Device Type",["Exterior Bait Station",
+    "Interior Bait Station","Snap Trap","Rodent Monitor","Light Trap",
+    "Moth Trap","Plaque"]));
+  d.appendChild(mk("dev-fail","Failure Type",["Missing","Damaged","Faulty",
+    "Obstructed"]));
+  var l=document.createElement("span");l.textContent="Device No.";
+  l.style.cssText="font-size:11px;font-weight:bold;color:#1a5c38";
+  d.appendChild(l);
+  d.appendChild(makeNumPicker("Select device no."));
+  var rm=document.createElement("button");
+  rm.type="button";rm.textContent="\u00d7";rm.className="delb";
+  rm.onclick=function(){
+    if(d.parentNode&&d.parentNode.children.length>1)d.parentNode.removeChild(d);
+  };
+  d.appendChild(rm);
+  return d;
+}
+function makeDevObsPanel(){
+  var box=document.createElement("div");box.className="dev-obs";
+  box.style.cssText="border:1px solid #b9d6c2;border-radius:4px;padding:6px;"+
+    "margin-bottom:6px;background:#f7faf8;display:none";
+  var list=document.createElement("div");list.className="dev-obs-list";
+  box.appendChild(list);
+  var add=document.createElement("button");
+  add.type="button";add.textContent="+ Add Device";add.className="add-dev-btn";
+  add.style.cssText="background:none;border:1px solid #2d7a50;color:#2d7a50;"+
+    "font-size:11px;font-weight:bold;border-radius:3px;padding:2px 8px;"+
+    "margin-top:5px;cursor:pointer";
+  add.onclick=function(){list.appendChild(makeDevBlock());};
+  box.appendChild(add);
+  list.appendChild(makeDevBlock());
+  return box;
+}
+// Photos are shrunk before they are held - a raw phone photo runs to several
+// megabytes and would not survive the trip to the sheet.
+function shrinkImage(file,cb){
+  var fr=new FileReader();
+  fr.onload=function(){
+    var img=new Image();
+    img.onload=function(){
+      var mx=1000,w=img.width,h=img.height;
+      if(w>mx||h>mx){var sc=Math.min(mx/w,mx/h);w=Math.round(w*sc);h=Math.round(h*sc);}
+      var c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      try{cb(c.toDataURL("image/jpeg",0.6));}catch(e){}
+    };
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+function makePhotoBtn(){
+  var wrap=document.createElement("div");
+  wrap.style.cssText="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px";
+  var inp=document.createElement("input");
+  inp.type="file";inp.accept="image/*";
+  inp.setAttribute("capture","environment");
+  inp.className="obs-photo-inp";inp.style.display="none";
+  var btn=document.createElement("button");
+  btn.type="button";btn.textContent="\uD83D\uDCF7 Take photo";
+  btn.style.cssText="background:#1a5c38;border:none;color:#fff;font-size:11px;"+
+    "font-weight:bold;border-radius:3px;padding:4px 10px;cursor:pointer";
+  btn.onclick=function(){inp.click();};
+  var thumbs=document.createElement("span");thumbs.className="obs-thumbs";
+  thumbs.style.cssText="display:inline-flex;gap:4px;flex-wrap:wrap";
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0];
+    if(f)shrinkImage(f,function(uri){
+      var im=document.createElement("img");
+      im.src=uri;im.className="obs-thumb";im.title="Tap to remove";
+      im.style.cssText="height:46px;border:1px solid #b9d6c2;border-radius:3px;cursor:pointer";
+      im.onclick=function(){if(im.parentNode)im.parentNode.removeChild(im);};
+      thumbs.appendChild(im);
+    });
+    inp.value="";
+  };
+  wrap.appendChild(btn);wrap.appendChild(inp);wrap.appendChild(thumbs);
+  return wrap;
+}
+
 function addRecRow(){
   var tb=g("rec-body");if(!tb)return;
   var tr=document.createElement("tr");
   var typeSel=document.createElement("select");
   typeSel.className="rec-type";typeSel.style.cssText="width:100%;font-size:12px";
-  ["Select type","Structural","Storage","Sanitation","Other"].forEach(function(t){
+  ["Select type","Devices","Structural","Storage","Sanitation","Other"].forEach(function(t){
     var o=document.createElement("option");o.textContent=t;typeSel.appendChild(o);
   });
   var notesTa=document.createElement("textarea");
@@ -3571,7 +3797,15 @@ function addRecRow(){
   delBtn.onclick=function(){if(tr.parentNode)tr.parentNode.removeChild(tr);};
   function td(el,w){var t=document.createElement("td");if(w)t.style.width=w;t.appendChild(el);return t;}
   tr.appendChild(td(typeSel,"130px"));
-  tr.appendChild(td(notesTa));
+  var cell=document.createElement("td");
+  var panel=makeDevObsPanel();
+  typeSel.onchange=function(){
+    panel.style.display=(typeSel.value==="Devices")?"block":"none";
+  };
+  cell.appendChild(panel);
+  cell.appendChild(makePhotoBtn());
+  cell.appendChild(notesTa);
+  tr.appendChild(cell);
   var dt=document.createElement("td");dt.appendChild(delBtn);tr.appendChild(dt);
   tb.appendChild(tr);
 }
@@ -3580,8 +3814,20 @@ function collectRecs(){
   var recs=[];
   g("rec-body").querySelectorAll("tr").forEach(function(r){
     var type=r.querySelector(".rec-type"),notes=r.querySelector(".rec-notes");
-    if(type&&notes&&notes.value.trim())
-      recs.push({type:type.value,notes:notes.value.trim()});
+    if(!type)return;
+    var devs=[];
+    r.querySelectorAll(".dev-blk").forEach(function(d){
+      var dt=d.querySelector(".dev-type"),ft=d.querySelector(".dev-fail");
+      var nos=getNums(d);
+      if((dt&&dt.value)||(ft&&ft.value)||nos.length)
+        devs.push({deviceType:dt?dt.value:"",failureType:ft?ft.value:"",
+                   deviceNos:nos});
+    });
+    var photos=[];
+    r.querySelectorAll(".obs-thumb").forEach(function(im){photos.push(im.src);});
+    var txt=notes?notes.value.trim():"";
+    if(txt||devs.length||photos.length)
+      recs.push({type:type.value,notes:txt,devices:devs,photos:photos});
   });
   return recs;
 }
