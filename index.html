@@ -2801,6 +2801,9 @@ function submitPending(){
     delete a[mSigFor];localStorage.setItem("org_pending",JSON.stringify(a));
     var doneNo=d.reportNo;
     rfRpts();rfPending();closeSigModal();
+    // Queued BEFORE the timer: if the phone is locked or the app closed
+    // inside the next second and a half, the retry on next load still has it.
+    pdfPendingAdd(doneNo);
     setTimeout(function(){uploadPDFtoDrive(doneNo);},1500);
     var st=g("svst");st.className="svst ok";
     st.innerHTML="Submitted "+esc(doneNo)+" <button class=\"pbtn\" onclick=\"dlPDF('"+doneNo+"')\">Download PDF</button>";
@@ -2867,6 +2870,7 @@ function doSubmit(){
     st.innerHTML="Saved: "+d.reportNo+" <button class=\"pbtn\" onclick=\"dlPDF('"+d.reportNo+"')\">Download PDF</button>";
     rfRpts();
     // Upload PDF to Drive and send email (always, no guard)
+    pdfPendingAdd(d.reportNo);
     setTimeout(function(){uploadPDFtoDrive(d.reportNo);},1500);
   }catch(e){btn.textContent="Retry";btn.disabled=false;g("svst").className="svst er";g("svst").textContent="Error: "+e.message;}
 }
@@ -2908,7 +2912,7 @@ function newRpt(){
     var syncBtn=document.querySelector("[onclick*=syncFromSheets]");
     if(syncBtn)syncBtn.style.display="none";
   }
-  g("subbtn").textContent="Submit and save report";g("subbtn").disabled=false;localStorage.removeItem("org_pdf_done");g("subbtn").onclick=doSubmit;
+  g("subbtn").textContent="Submit and save report";g("subbtn").disabled=false;g("subbtn").onclick=doSubmit;
   if(g("parkbtn")){g("parkbtn").textContent="Save & sign later";g("parkbtn").disabled=false;g("parkbtn").onclick=parkRpt;}
   g("svst").textContent="";window.scrollTo(0,0);
 }
@@ -3074,10 +3078,12 @@ function dlPDF(rno){
 
 function uploadPDFtoDrive(rno){
   try{
-    // Guard against double upload
-    var uploaded=JSON.parse(localStorage.getItem("org_pdf_done")||"{}");
-    if(uploaded[rno]){console.log("PDF already uploaded: "+rno);return;}
-    uploaded[rno]=true;localStorage.setItem("org_pdf_done",JSON.stringify(uploaded));
+    // PENDING, not done. This used to be marked done BEFORE the upload, so
+    // one dropped connection lost the PDF for good and blocked every retry.
+    // The flag is cleared only when Apps Script confirms it holds the file.
+    // Re-uploading is safe: savePDFtoDrive refuses to file the same report
+    // twice and does not re-email the customer.
+    pdfPendingAdd(rno);
     var all2=JSON.parse(localStorage.getItem("org_rpts")||"{}");var data=all2[rno];if(!data)return;
     var jsPDF=window.jspdf&&window.jspdf.jsPDF;if(!jsPDF)return;
     var doc=buildPDF(data);if(!doc)return;
@@ -3095,8 +3101,15 @@ function uploadPDFtoDrive(rno){
       custEmail:data.custEmail||""
     }));
     fetch(GAS_URL,{method:"POST",body:fd})
-      .then(function(){
-        console.log("PDF uploaded and email triggered: "+filename);
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(!res||res.status!=="ok"){
+          console.log("PDF upload not confirmed for "+rno+" (will retry):",res);
+          return;
+        }
+        pdfPendingClear(rno);
+        console.log("PDF uploaded and email triggered: "+filename+
+                    (res.created===false?" (already on Drive)":""));
         // Quote request handled in saveRpt
         // Send WhatsApp to customer cell if provided
         if(data.custCell){
@@ -3112,8 +3125,78 @@ function uploadPDFtoDrive(rno){
           window.open("https://wa.me/"+waNum+"?text="+waMsg,"_blank");
         }
       })
-      .catch(function(e){console.log("Drive upload failed:",e.message);});
+      .catch(function(e){
+        console.log("Drive upload failed for "+rno+" (will retry):",e.message);
+      });
   }catch(e){console.log("PDF Drive upload error:",e.message);}
+}
+
+/* ── PDF UPLOAD: PENDING, RETRY AND RECONCILE ──
+   Three reports in every hundred reached the office as a Sheets row with no
+   PDF on Drive, spread across every technician - the upload was marked done
+   before it happened, so a dropped connection lost it silently. */
+function pdfPendingAdd(rno){
+  try{
+    var p=JSON.parse(localStorage.getItem("org_pdf_pending")||"{}");
+    p[rno]=true;localStorage.setItem("org_pdf_pending",JSON.stringify(p));
+  }catch(e){console.log("pdfPendingAdd:",e.message);}
+}
+function pdfPendingClear(rno){
+  try{
+    var p=JSON.parse(localStorage.getItem("org_pdf_pending")||"{}");
+    delete p[rno];localStorage.setItem("org_pdf_pending",JSON.stringify(p));
+  }catch(e){console.log("pdfPendingClear:",e.message);}
+}
+function retryPdfUploads(){
+  var p=JSON.parse(localStorage.getItem("org_pdf_pending")||"{}");
+  var keys=Object.keys(p);if(!keys.length)return;
+  var rpts=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  console.log("Retrying PDF upload for "+keys.length+" report(s)");
+  // A few at a time: each carries a base64 PDF, and a technician on mobile
+  // data should not have a dozen of them in flight at once.
+  keys.slice(0,5).forEach(function(rno,i){
+    if(!rpts[rno]){pdfPendingClear(rno);return;}
+    setTimeout(function(){uploadPDFtoDrive(rno);},i*4000);
+  });
+}
+/* Ask the office which reports it actually holds, and re-send anything this
+   device has that never arrived. This is what heals the reports already
+   lost, without anyone having to find them by hand. */
+function reconcilePdfs(){
+  if(typeof GAS_URL==="undefined"||!GAS_URL)return;
+  var rpts=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  var nos=Object.keys(rpts);if(!nos.length)return;
+  var now=new Date();
+  var months=[];
+  for(var k=0;k<2;k++){
+    var d2=new Date(now.getFullYear(),now.getMonth()-k,1);
+    months.push(d2.toLocaleString("en-US",{month:"long"})+" "+d2.getFullYear());
+  }
+  var fd=new FormData();
+  fd.append("payload",JSON.stringify({action:"pdfInventory",months:months}));
+  fetch(GAS_URL,{method:"POST",body:fd})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(!res||res.status!=="ok"||!res.reportNos)return;
+      var have={};res.reportNos.forEach(function(x){have[x]=true;});
+      var missing=[];
+      nos.forEach(function(rno){
+        var d3=rpts[rno];
+        if(!d3||!d3.signatureData)return;           // unsigned: nothing to file
+        if(!d3.date)return;
+        var ml=new Date(d3.date+"T00:00:00");
+        if(isNaN(ml))return;
+        var lbl=ml.toLocaleString("en-US",{month:"long"})+" "+ml.getFullYear();
+        if(months.indexOf(lbl)<0)return;            // only the scanned months
+        if(!have[rno])missing.push(rno);
+      });
+      if(!missing.length){console.log("PDF reconcile: nothing missing");return;}
+      console.log("PDF reconcile: office is missing "+missing.length+
+                  " PDF(s) this device holds: "+missing.join(", "));
+      missing.forEach(function(rno){pdfPendingAdd(rno);});
+      retryPdfUploads();
+    })
+    .catch(function(e){console.log("PDF reconcile failed:",e.message);});
 }
 
 /* ── PLANNER ── */
@@ -4309,6 +4392,8 @@ g("cs").addEventListener("change",function(){
   setTimeout(syncFromSheets,1500);
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
   setTimeout(retrySyncPending,3000);
+  setTimeout(retryPdfUploads,5000);
+  setTimeout(reconcilePdfs,8000);
   if(isMobile){
     document.querySelectorAll(".navbtn").forEach(function(btn){
       if(btn.textContent.indexOf("Digest")>=0||btn.textContent.indexOf("Stock Recon")>=0)
