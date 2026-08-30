@@ -145,11 +145,68 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div style="display:flex;align-items:center;gap:8px"><div class="navtabs">
 <button class="navbtn active" onclick="sw('form',this)">Service</button>
 <button class="navbtn" onclick="sw('planner',this)">Planner</button>
+<button class="navbtn" id="stock-in-btn" onclick="sw('stockin',this)">Stock In</button>
+<button class="navbtn" id="stock-count-btn" onclick="sw('stockcount',this)">Stock Count</button>
 <button class="navbtn" id="month-end-btn" onclick="triggerMonthEnd()" style="background:#c0392b;display:none">&#128197; Month End</button>
 
 
 </div><span style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.2);padding:3px 7px;border-radius:5px" id="rno">--</span></div></div>
 <div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span> &nbsp;|&nbsp; <span id="clear-month-link" onclick="clearArchivedMonth()" style="cursor:pointer;text-decoration:underline;color:#f9a;display:none">Clear May reports</span></div>
+
+<div id="panel-stockin" class="panel">
+<div class="card"><div class="chd">STOCK ISSUED TO TECHNICIAN (OFFICE)</div><div class="cbd">
+<p style="font-size:11px;color:#555;margin:0 0 8px">
+Record stock at the moment it is handed over. Without this the office cannot
+tell what a technician is holding &mdash; what has been used is only part of
+the picture, and a month-end count would show the difference as a variance.
+Enter the quantity in the unit shown beside each item.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div class="fld" style="max-width:220px"><label>Issued to</label>
+<select id="si-tech"><option value="">Select technician...</option></select></div>
+<div class="fld" style="max-width:180px"><label>Date issued</label>
+<input type="date" id="si-date"></div></div>
+<div id="si-body"></div>
+<button class="addb" onclick="addStockRow('si-body')">+ Add item</button>
+<div style="margin-top:10px">
+<button class="btn" id="si-submit" onclick="submitStockIssue()">Submit receipt</button>
+<span id="si-status" style="margin-left:10px;font-size:12px"></span></div>
+</div></div></div>
+
+<div id="panel-stockcount" class="panel">
+<div class="card"><div class="chd">MONTH-END STOCK COUNT</div><div class="cbd">
+<div id="sc-head" style="background:#fff3cd;border:1px solid #C9A227;
+     color:#7a5f12;padding:8px 10px;border-radius:4px;font-size:12px;
+     margin-bottom:10px">
+<b>Count what you physically have on you</b> as at the last day of the month.
+Enter the quantity in the unit shown beside each item &mdash; for a part-used
+container that is the amount left, not the number of containers.</div>
+<div id="sc-body"></div>
+<button class="addb" onclick="addStockRow('sc-body')">+ Add item</button>
+<label style="display:flex;align-items:center;gap:7px;margin-top:10px;
+       font-size:12px;cursor:pointer">
+<input type="checkbox" id="sc-nil"> I am holding no stock at all this month
+</label>
+<div style="margin-top:10px">
+<button class="btn" id="sc-submit" onclick="submitStockCount()"
+        style="background:#1a5c38">Submit Count</button>
+<span id="sc-status" style="margin-left:10px;font-size:12px"></span></div>
+</div></div></div>
+
+<div id="stock-block" style="display:none;position:fixed;inset:0;
+     background:rgba(20,30,25,.97);z-index:9999;align-items:center;
+     justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:8px;max-width:420px;padding:22px;
+       text-align:center">
+    <div style="font-size:38px">&#128203;</div>
+    <h2 style="margin:8px 0 4px;font-size:17px;color:#1a5c38">
+      Month-end stock count due</h2>
+    <p id="stock-block-msg" style="font-size:13px;color:#444;line-height:1.5">
+      Please submit your closing stock count before capturing any service
+      reports.</p>
+    <button class="btn" onclick="gotoStockCount()"
+            style="background:#1a5c38;margin-top:8px">Go to Stock Count</button>
+  </div>
+</div>
 <div id="panel-form" class="panel active">
 <details class="card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span> &nbsp;<button class="bsm am" onclick="retrySyncAll()" style="font-size:9px;padding:2px 6px;vertical-align:middle">&#8635; Sync to Sheets</button></summary><div style="padding:0 12px 12px" id="rlist"><p style="color:#666;font-size:12px;padding:8px 0">No saved reports yet.</p></div></details>
 <details class="card" id="pend-card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#8a5a00;cursor:pointer;list-style:none">&#9998; Awaiting signature <span id="pbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary><div style="padding:0 12px 12px"><p style="font-size:10px;color:#666;margin:2px 0 8px">Completed reports parked on this device until the customer representative signs them. They are <b>not</b> sent to the office until signed and submitted.</p><div id="plist"></div></div></details>
@@ -1939,6 +1996,257 @@ var rNo=genNo();
 function g(id){return document.getElementById(id);}
 
 /* ── NAV ── */
+/* ── TECHNICIAN STOCK ──────────────────────────────────────────
+   Closing stock was counted on paper and typed into the recon by hand. In
+   July 2026 two of the nine technicians were never captured at all and
+   nobody was told.
+
+   Receipts matter as much as the count: usage alone accounts for only 45% of
+   what a technician has to count, because stock issued and not yet used is
+   invisible to the platform.
+
+   The count is BLIND on purpose - the expected figure is never shown, so the
+   number that comes back is what the technician actually has. */
+var STOCK_ITEMS=[["EnsCRA021", "Hymenopthor Granules (1x450gr)", "gr", 450.0, "Ants"], ["ANT001_NEW", "Maxforce Quant Ant Bait-810241 (4x30Gr)", "gr", 120.0, "Ants"], ["BaAnt001", "Maxforce Quantum Ant Gel (1x30gr)", "gr", 30.0, "Ants"], ["ANT002_NEW", "Trojan Ant Bait (1x3kg)", "gr", 3000.0, "Ants"], ["ANT003_NEW", "Trojan Ant Granules (1X200gr)", "gr", 200.0, "Ants"], ["ANT004_NEW", "Ultrakill Ant Force (10x100gr) Code 810285", "gr", 1000.0, "Ants"], ["CRA013", "Advion C-Roach Gel Bait (4x30gr)", "gr", 120.0, "Cockroaches"], ["COC002_NEW", "Cockroach Glueboard (No 10 G/board) - 100u/Box", "boards", 1.0, "Cockroaches"], ["COC003_NEW", "Coopers Pro Roach Gel Tube (1x35gr)", "gr", 35.0, "Cockroaches"], ["COC010_NEW", "Coopex Dust - Cockroach (1x5kg)", "gr", 5000.0, "Cockroaches"], ["COC005_NEW", "David Roach Gel 30gr", "gr", 30.0, "Cockroaches"], ["COC009_NEW", "Insect Monitor Black Plastic", "units", 1.0, "Cockroaches"], ["COC001_NEW", "Insect Monitor G/Board - Plastic", "boards", 1.0, "Cockroaches"], ["BaCra104", "Maxforce Platin Syringe 30gr (1x4)", "gr", 30.0, "Cockroaches"], ["CRA009", "Nupro Aerosol / Nuvan Profi (1x330ml)", "cans", 1.0, "Cockroaches"], ["CoCRA001", "Ultrakill All Purp Flush Aerosol (1x12)", "ml", 325.0, "Cockroaches"], ["CoCRA016", "Ultrakill Roachforce Gel (1x35gr)", "gr", 35.0, "Cockroaches"], ["COC008_NEW", "Zenithor Roach Gel (4x30gr)", "gr", 120.0, "Cockroaches"], ["FLI001_NEW", "Aerosol Dispenser", "units", 1.0, "Flies"], ["FLY023", "Avimatic Aerosol 300ml", "cans", 1.0, "Flies"], ["FLY032", "Avispray 300ml", "cans", 1.0, "Flies"], ["FLY007", "ILT - Cobra", "units", 1.0, "Flies"], ["FLY009", "ILT - Cobra Front Cover", "units", 1.0, "Flies"], ["FLY011", "ILT - Viper 30 Catcher", "units", 1.0, "Flies"], ["FLY026", "ILT - Viper 30 Killer", "units", 1.0, "Flies"], ["FLI025_NEW", "ILT Starter", "units", 1.0, "Flies"], ["FLI005_NEW", "Illume Glueboards (Box of 10)", "boards", 1.0, "Flies"], ["FLI028_NEW", "Illume Lamp UV 26 W S/P Tubes", "units", 1.0, "Flies"], ["FLI031_NEW", "Illume Tube - New Specification Sept 18", "units", 1.0, "Flies"], ["FLI015_NEW", "Illume Unit - Brass", "units", 1.0, "Flies"], ["FLI018_NEW", "LED Insect Light Trap - Genus Cobra 218M Catcher (14w)", "units", 1.0, "Flies"], ["FLI019_NEW", "LED Insect Light Trap - Luralite Centro - Black", "units", 1.0, "Flies"], ["FLI020_NEW", "LED Insect Light Trap - Luralite Centro - Brass", "units", 1.0, "Flies"], ["FLI021_NEW", "LED Insect Light Trap - Luralite Centro - Stainless Steel", "units", 1.0, "Flies"], ["FLI022_NEW", "LED Insect Light Trap - Luralite Centro - White", "units", 1.0, "Flies"], ["FLI023_NEW", "LED Insect Light Trap - Practika - Aluminium (14w)", "units", 1.0, "Flies"], ["FLI006_NEW", "LED Insect Light Trap Glueboards - Cento (Box of 6)", "boards", 1.0, "Flies"], ["FLI032_NEW", "LED Insect Light Trap Long Lamps - Practika (Box of 2)", "units", 1.0, "Flies"], ["FLI033_NEW", "LED Insect Light Trap Short Lamps - Cento (Box of 2)", "units", 1.0, "Flies"], ["FLI010_NEW", "Liberator Stainless Steel Catcher (60W)", "units", 1.0, "Flies"], ["FLY015", "Red Tops", "units", 1.0, "Flies"], ["FLI002_NEW", "Ultrakill Fly Scatter Bait (10x500g)", "gr", 5000.0, "Flies"], ["FLI004_NEW", "Universal Glueboard Code 313 (15 PACK)", "boards", 1.0, "Flies"], ["FLI016_NEW", "Used Viper Unit", "units", 1.0, "Flies"], ["FLI026_NEW", "Vectorthor 15W Astron Tube", "units", 1.0, "Flies"], ["FLI009_NEW", "Viper 60 Catcher", "units", 1.0, "Flies"], ["FLI014_NEW", "Viper 60 Killer", "units", 1.0, "Flies"], ["FLI034_NEW", "X-Lure Checkpoint - Glueboards Liners (Code 402)", "boards", 1.0, "Flies"], ["SPI001", "X-Lure Checkpoint Moth Trap", "units", 1.0, "Flies"], ["CoSPI007", "BAC Oil Pro Carry (1x5lt)", "ml", 5000.0, "Fumigation"], ["SPI005", "Carryfog (1x5lt)", "ml", 5000.0, "Fumigation"], ["CoSPI006", "Cooperfos Grainguard (1x5lt)", "ml", 5000.0, "Fumigation"], ["SPI010", "K-Obiol EC50 (1x5lt)", "ml", 5000.0, "Fumigation"], ["FUM001_NEW", "Pro Carry (BAC Oil) (1 x 5lt) (022111)", "ml", 5000.0, "Fumigation"], ["FUM002_NEW", "Talisma 308 EC (1 x 5lt)", "ml", 5000.0, "Fumigation"], ["CRA015", "Alphatrine (1x1lt)", "ml", 1000.0, "Residual Spray"], ["RES007_NEW", "DBM Double Strength (12 x 100ml)", "ml", 1200.0, "Residual Spray"], ["CoSPI014", "Delta Kill CS (1lt)", "ml", 1000.0, "Residual Spray"], ["CoSPI013", "Dorine EC (1x500ml)", "ml", 500.0, "Residual Spray"], ["RES008_NEW", "Larvakill SC (1 x 500ml)", "ml", 500.0, "Residual Spray"], ["EnsCra023", "Maxthor (1x1lt)", "ml", 1000.0, "Residual Spray"], ["RES013_NEW", "Maxxthor Turbo 1lt (CHEMT1003)", "ml", 1000.0, "Residual Spray"], ["RES009_NEW", "Promethrin EC (1 x 1lt)", "ml", 1000.0, "Residual Spray"], ["CoFLY004", "Pybuthrin 44 (1x20lt)", "ml", 20000.0, "Residual Spray"], ["RES016_NEW", "Pybuthrin 4T4 Lite (1x5lt)", "ml", 5000.0, "Residual Spray"], ["BaFly001", "QuickBayt Spray WG 10 (1x1kg)", "gr", 1000.0, "Residual Spray"], ["CRA016", "Rossi Super 200 (1x1lt)", "ml", 1000.0, "Residual Spray"], ["SPI008", "Tempo EW (1x500ml)", "ml", 500.0, "Residual Spray"], ["RES002_NEW", "Tempo SC (1 x 200ml)", "ml", 200.0, "Residual Spray"], ["BaCra102", "Temprid SC (1x200ml)", "ml", 200.0, "Residual Spray"], ["ROD023_NEW", "ABS .9 Plaques (150mm x 105mm)", "units", 1.0, "Rodents"], ["ROD020_NEW", "ABS Bait Station Plaques - Small 150mmx50mm", "units", 1.0, "Rodents"], ["ROD001_NEW", "Bait Stations ON Loan", "units", 1.0, "Rodents"], ["ROD018", "Catch Traps 24/7", "units", 1.0, "Rodents"], ["ROD008_NEW", "Charlie Bait Station", "units", 1.0, "Rodents"], ["ROD015_NEW", "Coopers Rodent Concentrate (1x500ml) (810410)", "ml", 500.0, "Rodents"], ["ROD030_NEW", "Fast Bait (1x3kg - 300 blocks)", "blocks", 1.0, "Rodents"], ["ROD023", "Jaguar Wax Blocks 8kg", "blocks", 1.0, "Rodents"], ["ROD012_NEW", "Mice Glue Board (72 box) (Code 616)", "boards", 1.0, "Rodents"], ["ROD028_NEW", "Non Toxic Blocks 2.5kg (250x10gr block)", "blocks", 250.0, "Rodents"], ["ROD005_NEW", "Pro Medium Multi Catch Rodent Trap", "units", 1.0, "Rodents"], ["ROD027_NEW", "Racumin 3D Paste (1x5kg)", "gr", 5000.0, "Rodents"], ["ROD019", "Racumin Wax Blocks 10kg", "blocks", 1.0, "Rodents"], ["ROD009_NEW", "Rat Snap Trap", "units", 1.0, "Rodents"], ["ROD006_NEW", "Rodent Econo Stations", "units", 1.0, "Rodents"], ["ROD004_NEW", "Rodenthor Beta Bait Station", "units", 1.0, "Rodents"], ["ROD031_NEW", "Selontra Rodent Bait (1x5kg)", "gr", 5000.0, "Rodents"], ["ROD002_NEW", "Square Cardboard Mouse Trap (Code 118)", "units", 1.0, "Rodents"], ["ROD029_NEW", "Tomcat Blocks 8kg (800 x 10gr Block)", "blocks", 800.0, "Rodents"], ["ROD010_NEW", "Trapper Mini Rex (Code 624)", "units", 1.0, "Rodents"], ["ROD013_NEW", "Trapper Rat Glueboard (1x48)", "boards", 1.0, "Rodents"], ["ROD007_NEW", "Used Bait Stations", "units", 1.0, "Rodents"], ["SEL043_NEW", "Avi Sipermetrin (1 x 1ltr)", "units", 1.0, "Seldom Used"], ["SEL014_NEW", "Bravo Bait Station", "units", 1.0, "Seldom Used"], ["SEL047_NEW", "Cat Trap", "units", 1.0, "Seldom Used"], ["SEL010_NEW", "Coopers Quickfos Chains (10x34gr)", "gr", 340.0, "Seldom Used"], ["SEL044_NEW", "Deltanex 15 EC (1x1lt)", "ml", 1000.0, "Seldom Used"], ["SEL005_NEW", "Ecothor Insect Monitor (1x25pack)", "units", 1.0, "Seldom Used"], ["SEL028_NEW", "Ecothor Insect Monitor Glueboard (100pack)", "boards", 1.0, "Seldom Used"], ["SEL002_NEW", "Liquid Bait Dispenser x 1 (Code 240)", "units", 1.0, "Seldom Used"], ["SEL036_NEW", "Maxforce Prime (1x30gr)", "gr", 30.0, "Seldom Used"], ["SEL013_NEW", "Metal Snap Traps", "units", 1.0, "Seldom Used"], ["CRA001", "Termidor SC 825ml", "ml", 825.0, "Seldom Used"], ["SEL003_NEW", "Thiatox Fly Bait 100 (1x125gr)", "gr", 125.0, "Seldom Used"], ["SEL053_NEW", "Ultrakill Rat and Mouse Wax Blocks (1x10kg)", "blocks", 1000.0, "Seldom Used"]];
+
+// The first month a count is required. Without this the block would demand a
+// count for whatever month happened to precede go-live - on 30/08/2026 that
+// was July, which nobody was ever asked to count.
+var STOCK_COUNT_FROM="2026-08";
+
+function stockCountMonth(){
+  // On the 1st of September a technician counts what they held at the end of
+  // August, so the month being counted is always the previous one.
+  var d=new Date();
+  var y=d.getFullYear(),m=d.getMonth();      // 0-based
+  if(m===0)return (y-1)+"-12";
+  return y+"-"+String(m).padStart(2,"0");
+}
+function stockCountDue(){
+  // Nothing is due until the first month of the scheme has actually ended.
+  return stockCountMonth()>=STOCK_COUNT_FROM;
+}
+function monthLabel(ym){
+  var N=["January","February","March","April","May","June","July","August",
+         "September","October","November","December"];
+  var p=String(ym).split("-");
+  return N[parseInt(p[1],10)-1]+" "+p[0];
+}
+function addStockRow(bodyId){
+  var body=g(bodyId);if(!body)return;
+  var row=document.createElement("div");
+  row.className="stock-row";
+  row.style.cssText="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap";
+  var sel=document.createElement("select");
+  sel.className="stk-item";sel.style.cssText="flex:1 1 210px;font-size:12px";
+  var o0=document.createElement("option");o0.value="";o0.textContent="Select item...";
+  sel.appendChild(o0);
+  STOCK_ITEMS.forEach(function(it){
+    var o=document.createElement("option");
+    o.value=it[0];o.textContent=it[1];sel.appendChild(o);
+  });
+  var qty=document.createElement("input");
+  qty.type="number";qty.min="0";qty.step="0.01";qty.placeholder="0";
+  qty.className="stk-qty";qty.style.cssText="width:82px;font-size:12px";
+  var unit=document.createElement("span");
+  unit.className="stk-unit";
+  unit.style.cssText="font-size:11px;font-weight:bold;color:#1a5c38;min-width:52px";
+  var hint=document.createElement("span");
+  hint.className="stk-hint";
+  hint.style.cssText="font-size:10px;color:#8a6d1a;flex:1 1 100%";
+  sel.onchange=function(){
+    var it=STOCK_ITEMS.filter(function(x){return x[0]===sel.value;})[0];
+    unit.textContent=it?it[2]:"";
+    // 47 of the 105 items are counted in a sub-pack unit. Saying so on the
+    // row is the difference between "half a bottle" and 500 ml.
+    hint.textContent=(it&&it[3]>1)
+      ? ("one full pack = "+it[3]+" "+it[2])
+      : "";
+  };
+  var del=document.createElement("button");
+  del.type="button";del.textContent="\u00d7";del.className="delb";
+  del.onclick=function(){if(row.parentNode)row.parentNode.removeChild(row);};
+  row.appendChild(sel);row.appendChild(qty);row.appendChild(unit);
+  row.appendChild(del);row.appendChild(hint);
+  body.appendChild(row);
+}
+function collectStockRows(bodyId){
+  var out=[],seen={},dupe=null;
+  g(bodyId).querySelectorAll(".stock-row").forEach(function(r){
+    var code=r.querySelector(".stk-item").value;
+    var q=r.querySelector(".stk-qty").value;
+    if(!code)return;
+    if(seen[code]){dupe=code;return;}
+    seen[code]=true;
+    var it=STOCK_ITEMS.filter(function(x){return x[0]===code;})[0];
+    out.push({code:code,name:it?it[1]:"",unit:it?it[2]:"",
+              qty:parseFloat(q)||0});
+  });
+  return {lines:out,dupe:dupe};
+}
+function stockPost(payload,btn,statusEl,okMsg,after){
+  var b=g(btn),st=g(statusEl);
+  b.disabled=true;var old=b.textContent;b.textContent="Sending...";
+  var fd=new FormData();fd.append("payload",JSON.stringify(payload));
+  fetch(GAS_URL,{method:"POST",body:fd})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      b.disabled=false;b.textContent=old;
+      if(res&&res.status==="ok"){
+        st.style.color="#1a5c38";st.textContent=okMsg;
+        if(after)after(res);
+      }else{
+        st.style.color="#c0392b";
+        st.textContent="Not saved: "+((res&&res.message)||"unknown error")+
+                       " - please try again.";
+      }
+    })
+    .catch(function(e){
+      b.disabled=false;b.textContent=old;
+      st.style.color="#c0392b";
+      st.textContent="Not saved (no connection): "+e.message+
+                     " - try again when you have signal.";
+    });
+}
+function submitStockIssue(){
+  var c=collectStockRows("si-body");
+  var st=g("si-status");st.style.color="#c0392b";
+  if(c.dupe){st.textContent="The same item is listed twice - please combine it.";return;}
+  if(!c.lines.length){st.textContent="Add at least one item.";return;}
+  var zero=c.lines.filter(function(l){return !(l.qty>0);});
+  if(zero.length){st.textContent="Enter a quantity for every item listed.";return;}
+  var tk=g("si-tech").value;
+  if(!tk){st.textContent="Choose the technician the stock was issued to.";return;}
+  stockPost({action:"saveStockIssue",date:g("si-date").value,
+             techKey:tk,techName:TECH_SHORT[tk]||tk,
+             capturedBy:"office",
+             lines:c.lines,submittedAt:new Date().toISOString()},
+            "si-submit","si-status","Issue recorded. Thank you.",
+            function(){g("si-body").innerHTML="";addStockRow("si-body");
+                       g("si-tech").value="";});
+}
+function submitStockCount(){
+  var ym=stockCountMonth();
+  var nil=g("sc-nil").checked;
+  var c=collectStockRows("sc-body");
+  var st=g("sc-status");st.style.color="#c0392b";
+  if(c.dupe){st.textContent="The same item is listed twice - please combine it.";return;}
+  if(!nil&&!c.lines.length){
+    st.textContent="Add the stock you are holding, or tick the box to say you hold none.";
+    return;}
+  if(nil&&c.lines.length){
+    st.textContent="You have listed stock but also ticked 'no stock at all'.";
+    return;}
+  stockPost({action:"saveStockCount",month:ym,
+             techKey:window.TECH_LOCK||"",techName:currentTechName(),
+             lines:nil?[]:c.lines,submittedAt:new Date().toISOString()},
+            "sc-submit","sc-status",
+            "Count submitted for "+monthLabel(ym)+". Thank you.",
+            function(){
+              stockMarkCounted(ym);
+              clearStockBlock();
+            });
+}
+function currentTechName(){
+  if(!window.TECH_LOCK)return "";
+  for(var reg in TKEYS_MAP){
+    if(TKEYS_MAP[reg]===window.TECH_LOCK)return TD[reg]||window.TECH_LOCK;
+  }
+  return window.TECH_LOCK;
+}
+function stockMarkCounted(ym){
+  try{
+    var c=JSON.parse(localStorage.getItem("org_stock_counted")||"{}");
+    c[(window.TECH_LOCK||"")+"|"+ym]=true;
+    localStorage.setItem("org_stock_counted",JSON.stringify(c));
+  }catch(e){}
+}
+function stockLocallyCounted(ym){
+  try{
+    var c=JSON.parse(localStorage.getItem("org_stock_counted")||"{}");
+    return !!c[(window.TECH_LOCK||"")+"|"+ym];
+  }catch(e){return false;}
+}
+function gotoStockCount(){
+  clearStockBlockOverlayOnly();
+  var b=g("stock-count-btn");
+  if(b)sw("stockcount",b);
+}
+function clearStockBlockOverlayOnly(){
+  var o=g("stock-block");if(o)o.style.display="none";
+}
+function clearStockBlock(){
+  window.STOCK_BLOCKED=false;
+  clearStockBlockOverlayOnly();
+  applyStockBlock();
+}
+/* The block sits on the service form, not on the submit button: the customer
+   signature is captured AT submission, so refusing there would leave someone
+   signing a report that is then rejected. */
+function applyStockBlock(){
+  var blocked=!!window.STOCK_BLOCKED;
+  ["subbtn","parkbtn"].forEach(function(id){
+    var b=g(id);if(!b)return;
+    b.disabled=blocked;
+    b.title=blocked?"Submit your month-end stock count first":"";
+    b.style.opacity=blocked?"0.5":"";
+  });
+  var note=g("stock-block-note");
+  if(!note){
+    note=document.createElement("div");note.id="stock-block-note";
+    note.style.cssText="background:#f8d7da;border:1px solid #e0a0a5;"+
+      "color:#9b2c2c;padding:8px 10px;border-radius:4px;font-size:12px;"+
+      "font-weight:bold;margin-bottom:8px;display:none";
+    var p=g("panel-form");if(p)p.insertBefore(note,p.firstChild);
+  }
+  note.textContent="Service reports are on hold until your month-end stock "+
+                   "count is submitted. Open Stock Count to do it now.";
+  note.style.display=blocked?"block":"none";
+}
+function hideOfficeStockScreen(){
+  // Issues are captured by the office, not by the person receiving them.
+  if(!window.TECH_LOCK)return;
+  var b=g("stock-in-btn");if(b)b.style.display="none";
+  var p=g("panel-stockin");if(p)p.classList.remove("active");
+}
+function checkStockCount(){
+  hideOfficeStockScreen();
+  if(!window.TECH_LOCK)return;              // office view is never blocked
+  var ym=stockCountMonth();
+  if(!stockCountDue()){
+    g("sc-head").insertAdjacentHTML("beforeend",
+      "<div style='margin-top:5px'>The first count is due on 1 "+
+      monthLabel(STOCK_COUNT_FROM).split(" ")[0].substring(0,3)+
+      " month-end &mdash; nothing to submit yet.</div>");
+    window.STOCK_BLOCKED=false;applyStockBlock();return;
+  }
+  g("sc-head").insertAdjacentHTML("beforeend",
+    "<div style='margin-top:5px'><b>Counting: "+monthLabel(ym)+"</b></div>");
+  if(stockLocallyCounted(ym)){window.STOCK_BLOCKED=false;applyStockBlock();return;}
+  var fd=new FormData();
+  fd.append("payload",JSON.stringify(
+    {action:"getStockStatus",month:ym,techKey:window.TECH_LOCK}));
+  fetch(GAS_URL,{method:"POST",body:fd})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(!res||res.status!=="ok")return;    // unreachable: fail OPEN
+      if(res.counted){stockMarkCounted(ym);window.STOCK_BLOCKED=false;}
+      else{
+        window.STOCK_BLOCKED=true;
+        g("stock-block-msg").textContent=
+          "Please submit your closing stock count for "+monthLabel(ym)+
+          " before capturing any service reports.";
+        var o=g("stock-block");if(o)o.style.display="flex";
+      }
+      applyStockBlock();
+    })
+    .catch(function(e){
+      // No signal must never lock a technician out of their day's work.
+      console.log("stock status check failed (not blocking):",e.message);
+    });
+}
+
+
 function sw(id,btn){
   document.querySelectorAll(".panel").forEach(function(p){p.classList.remove("active");});
   document.querySelectorAll(".navbtn").forEach(function(b){b.classList.remove("active");});
@@ -1946,6 +2254,18 @@ function sw(id,btn){
   if(id==="planner"){buildTechFilters();loadPlannerFromSheets();}
   if(id==="digest"){g("ddate").valueAsDate=new Date();}
   if(id==="recon"){renderRecon();}
+  if(id==="stockin"&&!g("si-body").children.length){
+    g("si-date").valueAsDate=new Date();
+    var ts=g("si-tech");
+    if(ts&&ts.options.length<2){
+      Object.keys(TECH_SHORT).forEach(function(k){
+        if(k==="LARRY")return;                       // the test account
+        var o=document.createElement("option");
+        o.value=k;o.textContent=TECH_SHORT[k];ts.appendChild(o);
+      });
+    }
+    addStockRow("si-body");}
+  if(id==="stockcount"&&!g("sc-body").children.length){addStockRow("sc-body");}
 }
 
 /* ── FORM HELPERS ── */
@@ -4380,6 +4700,7 @@ g("cs").addEventListener("change",function(){
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
   setTimeout(retrySyncPending,3000);
   setTimeout(retryPdfUploads,5000);
+  setTimeout(checkStockCount,2500);
   setTimeout(reconcilePdfs,8000);
   if(isMobile){
     document.querySelectorAll(".navbtn").forEach(function(btn){
