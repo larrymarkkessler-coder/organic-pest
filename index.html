@@ -2086,6 +2086,23 @@ function collectStockRows(bodyId){
 }
 function stockPost(payload,btn,statusEl,okMsg,after){
   var b=g(btn),st=g(statusEl);
+  if(window.STOCK_PREVIEW){
+    // Show precisely what the real submit would send, then stop.
+    var lines=(payload.lines||[]);
+    var txt=lines.length
+      ? lines.map(function(l){return "   "+l.name+"  \u2192  "+l.qty+" "+l.unit;}).join("\n")
+      : "   (nil return - holding no stock)";
+    st.style.color="#1a5c38";
+    st.textContent="PREVIEW - nothing was saved.";
+    alert("PREVIEW ONLY - nothing has been saved.\n\n"+
+          "A technician pressing this would send:\n\n"+
+          "Month: "+(payload.month||payload.date||"")+"\n"+
+          "Technician: "+(payload.techName||payload.techKey||"")+"\n"+
+          "Items: "+lines.length+"\n"+txt+
+          "\n\nThe block would then lift and they could capture reports.");
+    if(after)after({status:"preview"});
+    return;
+  }
   b.disabled=true;var old=b.textContent;b.textContent="Sending...";
   var fd=new FormData();fd.append("payload",JSON.stringify(payload));
   fetch(GAS_URL,{method:"POST",body:fd})
@@ -2155,6 +2172,7 @@ function currentTechName(){
   return window.TECH_LOCK;
 }
 function stockMarkCounted(ym){
+  if(window.STOCK_PREVIEW)return;     // a preview must leave no trace
   try{
     var c=JSON.parse(localStorage.getItem("org_stock_counted")||"{}");
     c[(window.TECH_LOCK||"")+"|"+ym]=true;
@@ -2208,6 +2226,28 @@ function hideOfficeStockScreen(){
   if(!window.TECH_LOCK)return;
   var b=g("stock-in-btn");if(b)b.style.display="none";
   var p=g("panel-stockin");if(p)p.classList.remove("active");
+}
+/* Preview: ?stockpreview=1&as=VUYO
+   Applies a technician lock to the real screen so the block, the list and
+   the validation all behave exactly as they will tomorrow morning. */
+function startStockPreview(){
+  var q=new URLSearchParams(location.search);
+  if(q.get("stockpreview")!=="1")return false;
+  var who=(q.get("as")||"").toUpperCase();
+  if(!who||!TECH_SHORT[who]){
+    who=Object.keys(TECH_SHORT).filter(function(k){return k!=="LARRY";})[0];
+  }
+  window.STOCK_PREVIEW=true;
+  window.TECH_LOCK=who;
+  var bar=document.createElement("div");
+  bar.style.cssText="position:sticky;top:0;z-index:9998;background:#C9A227;"+
+    "color:#3a2d05;padding:7px 12px;font-size:12px;font-weight:bold;"+
+    "text-align:center";
+  bar.innerHTML="PREVIEW \u2014 you are seeing exactly what "+
+    (TECH_SHORT[who]||who)+" will see tomorrow morning. "+
+    "Nothing you enter here is saved.";
+  document.body.insertBefore(bar,document.body.firstChild);
+  return true;
 }
 function checkStockCount(){
   hideOfficeStockScreen();
@@ -4700,6 +4740,7 @@ g("cs").addEventListener("change",function(){
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
   setTimeout(retrySyncPending,3000);
   setTimeout(retryPdfUploads,5000);
+  startStockPreview();
   setTimeout(checkStockCount,2500);
   setTimeout(reconcilePdfs,8000);
   if(isMobile){
