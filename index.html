@@ -180,16 +180,23 @@ Enter the quantity in the unit shown beside each item.</p>
 <b>Count what you physically have on you</b> as at the last day of the month.
 Enter the quantity in the unit shown beside each item &mdash; for a part-used
 container that is the amount left, not the number of containers.</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+<div class="fld" style="max-width:230px"><label>Technician</label>
+<select id="sc-tech"><option value="">Select technician...</option></select></div>
+<div class="fld" style="max-width:200px"><label>Month being counted</label>
+<select id="sc-month"></select></div>
+</div>
 <div id="sc-body"></div>
 <button class="addb" onclick="addStockRow('sc-body')">+ Add item</button>
-<label style="display:flex;align-items:center;gap:7px;margin-top:10px;
-       font-size:12px;cursor:pointer">
-<input type="checkbox" id="sc-nil"> I am holding no stock at all this month
-</label>
-<div style="margin-top:10px">
+<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;
+     align-items:center">
 <button class="btn" id="sc-submit" onclick="submitStockCount()"
         style="background:#1a5c38">Submit Count</button>
-<span id="sc-status" style="margin-left:10px;font-size:12px"></span></div>
+<button type="button" id="sc-nil-btn" onclick="submitNilCount()"
+        style="background:none;border:1px solid #8a6d1a;color:#8a6d1a;
+        font-size:12px;font-weight:bold;border-radius:4px;padding:7px 12px;
+        cursor:pointer">I hold no stock this month</button>
+<span id="sc-status" style="font-size:12px"></span></div>
 </div></div></div>
 
 <div id="stock-block" style="display:none;position:fixed;inset:0;
@@ -2143,26 +2150,81 @@ function submitStockIssue(){
                        g("si-tech").value="";});
 }
 function submitStockCount(){
-  var ym=stockCountMonth();
-  var nil=g("sc-nil").checked;
+  fillStockCountSelectors();
+  var who=g("sc-tech").value,ym=g("sc-month").value;
   var c=collectStockRows("sc-body");
   var st=g("sc-status");st.style.color="#c0392b";
+  if(!who){st.textContent="Choose the technician this count is for.";return;}
+  if(!ym){st.textContent="Choose the month being counted.";return;}
   if(c.dupe){st.textContent="The same item is listed twice - please combine it.";return;}
-  if(!nil&&!c.lines.length){
-    st.textContent="Add the stock you are holding, or tick the box to say you hold none.";
+  if(!c.lines.length){
+    st.textContent="Add the stock you are holding, or press "+
+                   "'I hold no stock this month'.";
     return;}
-  if(nil&&c.lines.length){
-    st.textContent="You have listed stock but also ticked 'no stock at all'.";
+  var zero=c.lines.filter(function(l){return !(l.qty>0);});
+  if(zero.length){
+    st.textContent="Enter a quantity for every item listed, or remove it.";
     return;}
-  stockPost({action:"saveStockCount",month:ym,
-             techKey:window.TECH_LOCK||"",techName:currentTechName(),
-             lines:nil?[]:c.lines,submittedAt:new Date().toISOString()},
+  stockPost({action:"saveStockCount",month:ym,techKey:who,
+             techName:TECH_SHORT[who]||who,
+             lines:c.lines,submittedAt:new Date().toISOString()},
             "sc-submit","sc-status",
             "Count submitted for "+monthLabel(ym)+". Thank you.",
             function(){
               stockMarkCounted(ym);
               clearStockBlock();
             });
+}
+function fillStockCountSelectors(){
+  var ts=g("sc-tech");
+  if(ts&&ts.options.length<2){
+    Object.keys(TECH_SHORT).forEach(function(k){
+      if(k==="LARRY")return;                       // the test account
+      var o=document.createElement("option");
+      o.value=k;o.textContent=TECH_SHORT[k];ts.appendChild(o);
+    });
+  }
+  var ms=g("sc-month");
+  if(ms&&!ms.options.length){
+    // The last twelve months, newest first. Naming the year as well as the
+    // month removes any doubt about which January is meant.
+    var d=new Date();
+    for(var i=1;i<=12;i++){
+      var y=d.getFullYear(),m=d.getMonth()-i;      // 0-based, may go negative
+      while(m<0){m+=12;y-=1;}
+      var ym=y+"-"+String(m+1).padStart(2,"0");
+      var o=document.createElement("option");
+      o.value=ym;o.textContent=monthLabel(ym);ms.appendChild(o);
+    }
+  }
+  if(ms)ms.value=stockCountMonth();
+  // A logged-in technician is counted as themselves. Letting one file under
+  // a colleague would corrupt two counts and unblock the wrong person.
+  if(window.TECH_LOCK&&ts){
+    ts.value=window.TECH_LOCK;
+    ts.disabled=true;
+    ts.title="You are signed in as "+(TECH_SHORT[window.TECH_LOCK]||
+             window.TECH_LOCK);
+  }
+}
+function submitNilCount(){
+  fillStockCountSelectors();
+  var who=g("sc-tech").value,ym=g("sc-month").value;
+  var st=g("sc-status");st.style.color="#c0392b";
+  if(!who){st.textContent="Choose the technician first.";return;}
+  if(!ym){st.textContent="Choose the month being counted.";return;}
+  if(g("sc-body").querySelectorAll(".stk-item").length&&
+     collectStockRows("sc-body").lines.length){
+    st.textContent="You have listed stock - remove it first, or press "+
+                   "Submit Count instead.";return;}
+  if(!confirm("Confirm you are holding NO stock at all for "+
+              monthLabel(ym)+"?"))return;
+  stockPost({action:"saveStockCount",month:ym,techKey:who,
+             techName:TECH_SHORT[who]||who,lines:[],
+             submittedAt:new Date().toISOString()},
+            "sc-nil-btn","sc-status",
+            "Nil return submitted for "+monthLabel(ym)+". Thank you.",
+            function(){stockMarkCounted(ym);clearStockBlock();});
 }
 function currentTechName(){
   if(!window.TECH_LOCK)return "";
@@ -2189,6 +2251,8 @@ function gotoStockCount(){
   clearStockBlockOverlayOnly();
   var b=g("stock-count-btn");
   if(b)sw("stockcount",b);
+  fillStockCountSelectors();
+  if(!g("sc-body").children.length)addStockRow("sc-body");
 }
 function clearStockBlockOverlayOnly(){
   var o=g("stock-block");if(o)o.style.display="none";
@@ -2305,7 +2369,8 @@ function sw(id,btn){
       });
     }
     addStockRow("si-body");}
-  if(id==="stockcount"&&!g("sc-body").children.length){addStockRow("sc-body");}
+  if(id==="stockcount"&&!g("sc-body").children.length){
+    fillStockCountSelectors();addStockRow("sc-body");}
 }
 
 /* ── FORM HELPERS ── */
