@@ -145,7 +145,7 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div style="display:flex;align-items:center;gap:8px"><div class="navtabs">
 <button class="navbtn active" onclick="sw('form',this)">Service</button>
 <button class="navbtn" onclick="sw('planner',this)">Planner</button>
-<button class="navbtn" id="stock-in-btn" onclick="sw('stockin',this)">Stock In</button>
+<button class="navbtn" id="stock-in-btn" onclick="sw('stockin',this)" style="display:none">Stock In</button>
 <button class="navbtn" id="stock-count-btn" onclick="sw('stockcount',this)">Stock Count</button>
 <button class="navbtn" id="month-end-btn" onclick="triggerMonthEnd()" style="background:#c0392b;display:none">&#128197; Month End</button>
 
@@ -163,13 +163,14 @@ Enter the quantity in the unit shown beside each item.</p>
 <div style="display:flex;gap:10px;flex-wrap:wrap">
 <div class="fld" style="max-width:220px"><label>Issued to</label>
 <select id="si-tech"><option value="">Select technician...</option></select></div>
-<div class="fld" style="max-width:180px"><label>Date issued</label>
-<input type="date" id="si-date"></div></div>
+<div class="fld" style="max-width:200px"><label>Date issued</label>
+<select id="si-date"></select></div></div>
 <div id="si-body"></div>
 <button class="addb" onclick="addStockRow('si-body')">+ Add item</button>
 <div style="margin-top:10px">
-<button class="btn" id="si-submit" onclick="submitStockIssue()">Submit receipt</button>
+<button class="btn" id="si-submit" onclick="submitStockIssue()">Submit issue</button>
 <span id="si-status" style="margin-left:10px;font-size:12px"></span></div>
+<div id="si-list"></div>
 </div></div></div>
 
 <div id="panel-stockcount" class="panel">
@@ -2147,7 +2148,7 @@ function submitStockIssue(){
              lines:c.lines,submittedAt:new Date().toISOString()},
             "si-submit","si-status","Issue recorded. Thank you.",
             function(){g("si-body").innerHTML="";addStockRow("si-body");
-                       g("si-tech").value="";});
+                       g("si-tech").value="";loadIssuesByDate();});
 }
 function submitStockCount(){
   fillStockCountSelectors();
@@ -2174,6 +2175,81 @@ function submitStockCount(){
               stockMarkCounted(ym);
               clearStockBlock();
             });
+}
+function fillIssueDates(){
+  var ds=g("si-date");
+  if(!ds||ds.options.length)return;
+  // Every day of the current month up to today, newest first. Issues are
+  // captured as they happen, so the office is normally choosing today or a
+  // day or two back.
+  var now=new Date();
+  var y=now.getFullYear(),m=now.getMonth();
+  for(var d=now.getDate();d>=1;d--){
+    var iso=y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+    var o=document.createElement("option");
+    o.value=iso;
+    o.textContent=String(d).padStart(2,"0")+"/"+String(m+1).padStart(2,"0")+
+                  "/"+y+(d===now.getDate()?"  (today)":"");
+    ds.appendChild(o);
+  }
+  ds.value=y+"-"+String(m+1).padStart(2,"0")+"-"+
+           String(now.getDate()).padStart(2,"0");
+}
+/* Every issue captured this month, grouped by the date it was issued - which
+   is how the recon sums them, so this is the office's check that the total
+   they expect is the total that will be used. */
+function loadIssuesByDate(){
+  var box=g("si-list");
+  if(!box)return;
+  var now=new Date();
+  var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  box.innerHTML="<div style='font-size:11px;color:#777'>Loading "+
+                monthLabel(ym)+" issues...</div>";
+  var fd=new FormData();
+  fd.append("payload",JSON.stringify({action:"getStockIssues",month:ym}));
+  fetch(GAS_URL,{method:"POST",body:fd})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(!res||res.status!=="ok"){
+        box.innerHTML="<div style='font-size:11px;color:#8a6d1a'>"+
+          "Issue history unavailable - the getStockIssues action may not be "+
+          "deployed yet.</div>";
+        return;
+      }
+      var rows=res.rows||[];
+      if(!rows.length){
+        box.innerHTML="<div style='font-size:11px;color:#777'>No issues "+
+          "captured yet for "+monthLabel(ym)+".</div>";
+        return;
+      }
+      var byDate={};
+      rows.forEach(function(r){
+        var d=String(r[0]||"").substring(0,10);
+        (byDate[d]=byDate[d]||[]).push(r);
+      });
+      var h="<div style='font-size:11px;font-weight:bold;color:#1a5c38;"+
+            "margin:14px 0 6px'>ISSUES CAPTURED THIS MONTH ("+rows.length+
+            " line"+(rows.length===1?"":"s")+")</div>";
+      Object.keys(byDate).sort().reverse().forEach(function(d){
+        var p=d.split("-");
+        h+="<div style='margin-top:8px'><div style='font-size:11px;"+
+           "font-weight:bold;color:#2d7a50'>"+
+           (p.length===3?p[2]+"/"+p[1]+"/"+p[0]:d)+"</div>"+
+           "<table style='width:100%;border-collapse:collapse'>";
+        byDate[d].forEach(function(r){
+          h+="<tr><td style='padding:2px 4px;font-size:11px'>"+esc(r[2])+
+             "</td><td style='padding:2px 4px;font-size:11px'>"+esc(r[4])+
+             "</td><td style='padding:2px 4px;font-size:11px;text-align:right;"+
+             "font-weight:bold'>"+r[6]+" "+esc(r[5])+"</td></tr>";
+        });
+        h+="</table></div>";
+      });
+      box.innerHTML=h;
+    })
+    .catch(function(e){
+      box.innerHTML="<div style='font-size:11px;color:#c0392b'>Could not "+
+        "load issue history: "+esc(e.message)+"</div>";
+    });
 }
 function fillStockCountSelectors(){
   var ts=g("sc-tech");
@@ -2285,11 +2361,18 @@ function applyStockBlock(){
                    "count is submitted. Open Stock Count to do it now.";
   note.style.display=blocked?"block":"none";
 }
-function hideOfficeStockScreen(){
-  // Issues are captured by the office, not by the person receiving them.
-  if(!window.TECH_LOCK)return;
-  var b=g("stock-in-btn");if(b)b.style.display="none";
-  var p=g("panel-stockin");if(p)p.classList.remove("active");
+function showOfficeStockScreen(){
+  // Issues are captured by the office, never by the person receiving them.
+  // The button starts hidden and is revealed only for the office, so a
+  // technician cannot glimpse it and a failure here leaves it hidden.
+  var b=g("stock-in-btn");
+  if(!b)return;
+  if(window.TECH_LOCK){
+    b.style.display="none";
+    var p=g("panel-stockin");if(p)p.classList.remove("active");
+  }else{
+    b.style.display="";
+  }
 }
 /* Preview: ?stockpreview=1&as=VUYO
    Applies a technician lock to the real screen so the block, the list and
@@ -2314,7 +2397,7 @@ function startStockPreview(){
   return true;
 }
 function checkStockCount(){
-  hideOfficeStockScreen();
+  showOfficeStockScreen();
   if(!window.TECH_LOCK)return;              // office view is never blocked
   var ym=stockCountMonth();
   if(!stockCountDue()){
@@ -2359,7 +2442,7 @@ function sw(id,btn){
   if(id==="digest"){g("ddate").valueAsDate=new Date();}
   if(id==="recon"){renderRecon();}
   if(id==="stockin"&&!g("si-body").children.length){
-    g("si-date").valueAsDate=new Date();
+    fillIssueDates();
     var ts=g("si-tech");
     if(ts&&ts.options.length<2){
       Object.keys(TECH_SHORT).forEach(function(k){
@@ -2368,7 +2451,7 @@ function sw(id,btn){
         o.value=k;o.textContent=TECH_SHORT[k];ts.appendChild(o);
       });
     }
-    addStockRow("si-body");}
+    addStockRow("si-body");loadIssuesByDate();}
   if(id==="stockcount"&&!g("sc-body").children.length){
     fillStockCountSelectors();addStockRow("sc-body");}
 }
@@ -4806,6 +4889,7 @@ g("cs").addEventListener("change",function(){
   setTimeout(retrySyncPending,3000);
   setTimeout(retryPdfUploads,5000);
   startStockPreview();
+  showOfficeStockScreen();
   setTimeout(checkStockCount,2500);
   setTimeout(reconcilePdfs,8000);
   if(isMobile){
