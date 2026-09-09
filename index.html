@@ -3657,6 +3657,82 @@ function retryPdfUploads(){
 /* Ask the office which reports it actually holds, and re-send anything this
    device has that never arrived. This is what heals the reports already
    lost, without anyone having to find them by hand. */
+/* Ask the office which reports it holds for this month and last, and push
+   anything this device has that the office does not. Runs on every open, so
+   a failed submit heals on its own - no button, and no waiting for month end.
+
+   This is what protects a report that exists ONLY on the phone. retrySync()
+   cannot: it only revisits reports still flagged in org_pending_sync, and the
+   reports that go missing are exactly the ones whose flag was cleared because
+   the client thought the submit had worked. */
+function reconcileReports(){
+  if(typeof GAS_URL==="undefined"||!GAS_URL)return;
+  var rpts=JSON.parse(localStorage.getItem("org_rpts")||"{}");
+  var nos=Object.keys(rpts);
+  if(!nos.length)return;
+  var now=new Date(),months=[];
+  for(var k=0;k<2;k++){
+    var d=new Date(now.getFullYear(),now.getMonth()-k,1);
+    months.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"));
+  }
+  var have={},done=0;
+  months.forEach(function(m){
+    var fd=new FormData();
+    fd.append("payload",JSON.stringify({action:"getMonthReports",month:m}));
+    fetch(GAS_URL,{method:"POST",body:fd})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res&&res.status==="ok"){
+          (res.rows||[]).forEach(function(row){have[String(row[0])]=true;});
+        }else{ throw new Error("bad answer"); }
+      })
+      .catch(function(e){
+        console.log("Report reconcile: could not read "+m+": "+e.message);
+        have=null;                       // unreadable: push nothing, try later
+      })
+      .then(function(){
+        if(++done<months.length)return;
+        if(!have){console.log("Report reconcile: skipped, office unreadable");return;}
+        var missing=nos.filter(function(rno){
+          var d2=rpts[rno];
+          if(!d2||!d2.date)return false;
+          if(months.indexOf(String(d2.date).substring(0,7))<0)return false;
+          return !have[rno];
+        });
+        if(!missing.length){console.log("Report reconcile: nothing missing");return;}
+        console.log("Report reconcile: office is missing "+missing.length+
+                    " report(s) this device holds: "+missing.join(", "));
+        var i=0;
+        (function pushNext(){
+          if(i>=missing.length){
+            console.log("Report reconcile: finished");
+            try{rfRpts();}catch(e){}
+            return;
+          }
+          var rno=missing[i++];
+          var p=JSON.parse(JSON.stringify(rpts[rno]));
+          p.signatureData=rpts[rno].signatureData?"SIGNED":"UNSIGNED";
+          var f2=new FormData();
+          f2.append("payload",JSON.stringify({action:"saveReport",data:p}));
+          fetch(GAS_URL,{method:"POST",body:f2})
+            .then(function(r){return r.json();})
+            .then(function(res){
+              if(res&&res.status==="ok"){
+                console.log("Report reconcile: sent "+rno);
+                // It is in the office now, so it can also be filed as a PDF.
+                if(rpts[rno].signatureData){pdfPendingAdd(rno);}
+              }else{
+                console.log("Report reconcile: office refused "+rno,res);
+              }
+            })
+            .catch(function(e){
+              console.log("Report reconcile: failed "+rno+": "+e.message);
+            })
+            .then(function(){setTimeout(pushNext,600);});
+        })();
+      });
+  });
+}
 function reconcilePdfs(){
   if(typeof GAS_URL==="undefined"||!GAS_URL)return;
   var rpts=JSON.parse(localStorage.getItem("org_rpts")||"{}");
@@ -4937,6 +5013,8 @@ g("cs").addEventListener("change",function(){
   startStockPreview();
   showOfficeStockScreen();
   setTimeout(checkStockCount,2500);
+  // Reports first: a report must reach the office before its PDF is filed.
+  setTimeout(reconcileReports,5000);
   setTimeout(reconcilePdfs,8000);
   if(isMobile){
     document.querySelectorAll(".navbtn").forEach(function(btn){
