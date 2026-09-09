@@ -4570,22 +4570,68 @@ function performLocalArchive(flagMonth) {
     return;
   }
 
-  // Show notification
-  var tech = (typeof TECH_SHORT !== "undefined" && window.TECH_LOCK) ?
-    (TECH_SHORT[window.TECH_LOCK] || window.TECH_LOCK) : "All";
-  
-  var msg = "📁 Month End: " + toArchive.length + " reports for " + flagMonth +
-    " have been archived to Google Drive.\n\nYour local reports will now be cleared for the new month.";
-  
-  if (confirm(msg)) {
-    // Clear localStorage reports for that month
-    var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
-    toArchive.forEach(function(r) { delete all[r.reportNo]; });
-    localStorage.setItem("org_rpts", JSON.stringify(all));
-    localStorage.setItem(ROLLOVER_KEY, flagMonth);
-    rfRpts();
-    alert("✓ Reports cleared. Starting fresh for the new month!");
+  // Ask the office what it actually holds before deleting anything. This
+  // used to clear every report dated in the month on the assumption they
+  // had all been archived - so a report that never reached the office, which
+  // existed only on this phone, was destroyed at month end along with the
+  // only copy of it.
+  var _fd = new FormData();
+  _fd.append("payload", JSON.stringify({action: "getMonthReports",
+                                        month: flagMonth}));
+  fetch(GAS_URL, {method: "POST", body: _fd})
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if (!res || res.status !== "ok") throw new Error("no answer");
+      var held = {};
+      (res.rows || []).forEach(function(row){ held[String(row[0])] = true; });
+      finishLocalArchive(flagMonth, toArchive, held);
+    })
+    .catch(function(e){
+      // Could not verify, so delete nothing. The flag is deliberately left
+      // unset, so this runs again next time the phone has signal.
+      console.log("Month-end clear skipped, office unreachable:", e.message);
+    });
+}
+
+/* Clears only what the office confirms it holds. `held` is the set of report
+   numbers the Reports sheet has for that month. Anything else stays on the
+   phone - it is the only copy. */
+function finishLocalArchive(flagMonth, toArchive, held) {
+  var safe = toArchive.filter(function(r){ return held[String(r.reportNo)]; });
+  var kept = toArchive.filter(function(r){ return !held[String(r.reportNo)]; });
+
+  if (!safe.length && kept.length) {
+    alert("\u26a0 Month End: none of your " + kept.length + " report(s) for " +
+          flagMonth + " have reached the office.\n\nNothing has been " +
+          "deleted. Open \"Saved reports\" and press \"Sync to Sheets\" " +
+          "while you have signal.");
+    return;                        // flag NOT set - ask again next time
   }
+
+  var msg = "\ud83d\udcc1 Month End: " + safe.length + " report(s) for " +
+    flagMonth + " are safely with the office and will be cleared from this " +
+    "phone.";
+  if (kept.length) {
+    msg += "\n\n\u26a0 " + kept.length + " report(s) have NOT reached the " +
+           "office and will be KEPT here:\n" +
+           kept.slice(0, 8).map(function(r){
+             return "   " + r.reportNo + "  " + (r.customer || "");
+           }).join("\n") +
+           "\n\nPress \"Sync to Sheets\" under Saved reports to send them.";
+  }
+  if (!confirm(msg)) return;
+
+  var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
+  safe.forEach(function(r) { delete all[r.reportNo]; });
+  localStorage.setItem("org_rpts", JSON.stringify(all));
+  // Only finish the rollover once nothing is outstanding, so the prompt
+  // keeps returning until every report has reached the office.
+  if (!kept.length) localStorage.setItem(ROLLOVER_KEY, flagMonth);
+  rfRpts();
+  alert(kept.length
+    ? ("\u2713 " + safe.length + " cleared. " + kept.length +
+       " kept on this phone until they reach the office.")
+    : "\u2713 Reports cleared. Starting fresh for the new month!");
 }
 
 function triggerMonthEnd() {
