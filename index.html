@@ -147,11 +147,11 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <button class="navbtn" onclick="sw('planner',this)">Planner</button>
 <button class="navbtn" id="stock-in-btn" onclick="sw('stockin',this)" style="display:none">Stock In</button>
 <button class="navbtn" id="stock-count-btn" onclick="sw('stockcount',this)">Stock Count</button>
-<button class="navbtn" id="month-end-btn" onclick="triggerMonthEnd()" style="background:#c0392b;display:none">&#128197; Month End</button>
+
 
 
 </div><span style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.2);padding:3px 7px;border-radius:5px" id="rno">--</span></div></div>
-<div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span> &nbsp;|&nbsp; <span id="clear-month-link" onclick="clearArchivedMonth()" style="cursor:pointer;text-decoration:underline;color:#f9a;display:none">Clear May reports</span></div>
+<div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span></div>
 
 <div id="panel-stockin" class="panel">
 <div class="card"><div class="chd">STOCK ISSUED TO TECHNICIAN (OFFICE)</div><div class="cbd">
@@ -3657,25 +3657,35 @@ function retryPdfUploads(){
 /* Ask the office which reports it actually holds, and re-send anything this
    device has that never arrived. This is what heals the reports already
    lost, without anyone having to find them by hand. */
-/* Ask the office which reports it holds for this month and last, and push
-   anything this device has that the office does not. Runs on every open, so
-   a failed submit heals on its own - no button, and no waiting for month end.
+/* Reconcile this phone with the office, every time the platform opens.
 
-   This is what protects a report that exists ONLY on the phone. retrySync()
-   cannot: it only revisits reports still flagged in org_pending_sync, and the
-   reports that go missing are exactly the ones whose flag was cleared because
-   the client thought the submit had worked. */
+   For each month the phone holds reports for - this month, last month, and
+   anything older still on the phone, six months at most:
+     - a report the office does NOT hold is sent (technician phones only);
+     - a report from an earlier month that the office DOES hold is dropped
+       from the phone. This is now the ONLY way a report leaves a phone;
+     - the phone then checks in, so month end can see which phones have
+       confirmed every report is with the office.
+
+   Matching is on report number AND date. Report numbers are random and
+   collide, and matching on the number alone could drop a report the office
+   has never seen because a different report happens to share its number. */
 function reconcileReports(){
   if(typeof GAS_URL==="undefined"||!GAS_URL)return;
   var rpts=JSON.parse(localStorage.getItem("org_rpts")||"{}");
-  var nos=Object.keys(rpts);
-  if(!nos.length)return;
-  var now=new Date(),months=[];
-  for(var k=0;k<2;k++){
-    var d=new Date(now.getFullYear(),now.getMonth()-k,1);
-    months.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"));
-  }
-  var have={},done=0;
+  var tech=window.TECH_LOCK||"";
+  var now=new Date();
+  function ymOf(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");}
+  var cur=ymOf(now),set={};
+  set[cur]=true;
+  set[ymOf(new Date(now.getFullYear(),now.getMonth()-1,1))]=true;
+  Object.keys(rpts).forEach(function(rno){
+    var m=String((rpts[rno]||{}).date||"").substring(0,7);
+    if(/^\d{4}-\d{2}$/.test(m))set[m]=true;
+  });
+  var months=Object.keys(set).sort().slice(-6);
+  function key(no,date){return String(no)+"|"+String(date||"").substring(0,10);}
+  var held={},done=0,failed=false;
   months.forEach(function(m){
     var fd=new FormData();
     fd.append("payload",JSON.stringify({action:"getMonthReports",month:m}));
@@ -3683,55 +3693,109 @@ function reconcileReports(){
       .then(function(r){return r.json();})
       .then(function(res){
         if(res&&res.status==="ok"){
-          (res.rows||[]).forEach(function(row){have[String(row[0])]=true;});
-        }else{ throw new Error("bad answer"); }
+          (res.rows||[]).forEach(function(row){held[key(row[0],row[1])]=true;});
+        }else if(!(res&&res.status==="error"&&/no archive found/i.test(res.message||""))){
+          // "no live rows and no archive" is a real answer: the office holds
+          // nothing for that month. Anything else means we could not tell.
+          throw new Error("bad answer");
+        }
       })
       .catch(function(e){
         console.log("Report reconcile: could not read "+m+": "+e.message);
-        have=null;                       // unreadable: push nothing, try later
+        failed=true;                     // unreadable: change nothing, try later
       })
       .then(function(){
         if(++done<months.length)return;
-        if(!have){console.log("Report reconcile: skipped, office unreadable");return;}
-        var missing=nos.filter(function(rno){
-          var d2=rpts[rno];
-          if(!d2||!d2.date)return false;
-          if(months.indexOf(String(d2.date).substring(0,7))<0)return false;
-          return !have[rno];
-        });
-        if(!missing.length){console.log("Report reconcile: nothing missing");return;}
-        console.log("Report reconcile: office is missing "+missing.length+
-                    " report(s) this device holds: "+missing.join(", "));
-        var i=0;
-        (function pushNext(){
-          if(i>=missing.length){
-            console.log("Report reconcile: finished");
-            try{rfRpts();}catch(e){}
-            return;
-          }
-          var rno=missing[i++];
-          var p=JSON.parse(JSON.stringify(rpts[rno]));
-          p.signatureData=rpts[rno].signatureData?"SIGNED":"UNSIGNED";
-          var f2=new FormData();
-          f2.append("payload",JSON.stringify({action:"saveReport",data:p}));
-          fetch(GAS_URL,{method:"POST",body:f2})
-            .then(function(r){return r.json();})
-            .then(function(res){
-              if(res&&res.status==="ok"){
-                console.log("Report reconcile: sent "+rno);
-                // It is in the office now, so it can also be filed as a PDF.
-                if(rpts[rno].signatureData){pdfPendingAdd(rno);}
-              }else{
-                console.log("Report reconcile: office refused "+rno,res);
-              }
-            })
-            .catch(function(e){
-              console.log("Report reconcile: failed "+rno+": "+e.message);
-            })
-            .then(function(){setTimeout(pushNext,600);});
-        })();
+        if(failed){console.log("Report reconcile: skipped, office unreadable");return;}
+        finishReconcile_(rpts,held,months,cur,tech,key);
       });
   });
+}
+function finishReconcile_(rpts,held,months,cur,tech,key){
+  var inScope=Object.keys(rpts).filter(function(rno){
+    var d=rpts[rno];
+    return d&&d.date&&months.indexOf(String(d.date).substring(0,7))>=0;
+  });
+  var missing=inScope.filter(function(rno){return !held[key(rno,rpts[rno].date)];});
+  // The office device holds a copy of the sheet, not reports of its own -
+  // sending those back could only resurrect rows. Phones only.
+  var toSend=tech?missing:[],sent={},i=0;
+  if(toSend.length){
+    console.log("Report reconcile: office is missing "+toSend.length+
+                " report(s) this device holds: "+toSend.join(", "));
+  }
+  (function pushNext(){
+    if(i<toSend.length){
+      var rno=toSend[i++];
+      var p=JSON.parse(JSON.stringify(rpts[rno]));
+      p.signatureData=rpts[rno].signatureData?"SIGNED":"UNSIGNED";
+      var f2=new FormData();
+      f2.append("payload",JSON.stringify({action:"saveReport",data:p}));
+      fetch(GAS_URL,{method:"POST",body:f2})
+        .then(function(r){return r.json();})
+        .then(function(res){
+          // "skipped" as a duplicate or already-archived also means the
+          // office has it. Refused for any other reason, it stays here.
+          var ok=res&&(res.status==="ok"||(res.status==="skipped"&&
+                 (res.reason==="duplicate"||res.reason==="already-archived")));
+          if(ok){
+            sent[rno]=true;
+            console.log("Report reconcile: sent "+rno);
+            if(res.status==="ok"&&rpts[rno].signatureData){pdfPendingAdd(rno);}
+          }else{
+            console.log("Report reconcile: office refused "+rno,res);
+          }
+        })
+        .catch(function(e){console.log("Report reconcile: failed "+rno+": "+e.message);})
+        .then(function(){setTimeout(pushNext,600);});
+      return;
+    }
+    // Only a report the office confirms may leave the phone - and only one
+    // from an earlier month; this month's stay in Saved reports.
+    var confirmed={};
+    inScope.forEach(function(rno){
+      if(held[key(rno,rpts[rno].date)]||sent[rno])confirmed[rno]=true;
+    });
+    var all=JSON.parse(localStorage.getItem("org_rpts")||"{}"),dropped=0;
+    Object.keys(confirmed).forEach(function(rno){
+      var d=all[rno];
+      if(d&&String(d.date||"").substring(0,7)<cur){delete all[rno];dropped++;}
+    });
+    if(dropped){
+      localStorage.setItem("org_rpts",JSON.stringify(all));
+      console.log("Report reconcile: "+dropped+" earlier-month report(s) confirmed "+
+                  "by the office and cleared from this phone");
+    }
+    console.log("Report reconcile: finished");
+    try{rfRpts();}catch(e){}
+    if(tech)checkInDevice_(rpts,inScope,confirmed,months,tech);
+  })();
+}
+/* Tell the office how complete this phone is, month by month. Parked reports
+   (Save & sign later) are unsigned and unsent, so they count as outstanding -
+   exactly the case a month-end check most needs to see. */
+function checkInDevice_(rpts,inScope,confirmed,months,tech){
+  var per={};
+  months.forEach(function(m){per[m]={month:m,onPhone:0,confirmed:0,outstanding:[]};});
+  inScope.forEach(function(rno){
+    var m=String(rpts[rno].date).substring(0,7);
+    if(!per[m])return;
+    per[m].onPhone++;
+    if(confirmed[rno])per[m].confirmed++;else per[m].outstanding.push(rno);
+  });
+  try{
+    var parked=JSON.parse(localStorage.getItem("org_pending")||"{}");
+    Object.keys(parked).forEach(function(rno){
+      var m=String((parked[rno]||{}).date||"").substring(0,7);
+      if(per[m]){per[m].onPhone++;per[m].outstanding.push(rno+" (awaiting signature)");}
+    });
+  }catch(e){}
+  var fd=new FormData();
+  fd.append("payload",JSON.stringify({action:"deviceCheckIn",techKey:tech,
+    techName:(typeof TECH_SHORT!=="undefined"&&TECH_SHORT[tech])||tech,
+    at:new Date().toISOString(),
+    months:Object.keys(per).map(function(k){return per[k];})}));
+  fetch(GAS_URL,{method:"POST",body:fd}).catch(function(){});
 }
 function reconcilePdfs(){
   if(typeof GAS_URL==="undefined"||!GAS_URL)return;
@@ -4710,72 +4774,12 @@ function finishLocalArchive(flagMonth, toArchive, held) {
     : "\u2713 Reports cleared. Starting fresh for the new month!");
 }
 
-function triggerMonthEnd() {
-  var now = new Date();
-  var month = now.getMonth() + 1; // current month
-  var year = now.getFullYear();
-  var monthName = ["January","February","March","April","May","June",
-    "July","August","September","October","November","December"][month-1];
-  
-  if (!confirm("Month End Rollover for " + monthName + " " + year + "\n\nThis will:\n• Archive all service reports to Google Drive\n• Archive & clear the Stock Analysis sheet\n• Archive & clear the Reports sheet\n• Signal all technicians to clear their phones\n\nProceed?")) return;
-  
-  var statusEl = g("month-end-btn");
-  if (statusEl) { statusEl.textContent = "⏳ Archiving..."; statusEl.disabled = true; }
-  
-  var fd = new FormData();
-  fd.append("payload", JSON.stringify({action: "setRolloverFlag", month: month, year: year}));
-  
-  fetch(GAS_URL, {method: "POST", body: fd})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      // Step 2: archive inventory
-      var flagMonth = year + "-" + String(month).padStart(2, "0");
-      var fd2 = new FormData();
-      fd2.append("payload", JSON.stringify({action:"archiveInventory", month:month, year:year}));
-      return fetch(GAS_URL, {method:"POST", body:fd2})
-        .then(function(r2){return r2.json();})
-        .then(function(d2){
-          if (statusEl) { statusEl.textContent = "✓ Done!"; }
-          // Clear local storage for the archived month
-          var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
-          var cleared = 0;
-          Object.keys(all).forEach(function(k){
-            if(all[k].date && all[k].date.indexOf(flagMonth)===0){ delete all[k]; cleared++; }
-          });
-          localStorage.setItem("org_rpts", JSON.stringify(all));
-          localStorage.setItem(ROLLOVER_KEY, flagMonth);
-          rfRpts();
-          alert("✓ Month End Complete!\n\n• " + cleared + " reports cleared from this device\n• Stock Analysis archived & cleared\n• Reports sheet cleared\n• Technicians signalled to clear their phones\n\nInventory: " + (d2.message||"done"));
-          setTimeout(function(){ 
-            if(statusEl){statusEl.textContent="📅 Month End";statusEl.disabled=false;}
-          }, 3000);
-        });
-    })
-    .catch(function(e){
-      if (statusEl) { statusEl.textContent = "📅 Month End"; statusEl.disabled = false; }
-      alert("Error: " + e.message);
-    });
-}
-
-
-function clearArchivedMonth(){
-  var flag = localStorage.getItem(ROLLOVER_KEY) || "";
-  if(!flag){
-    // No flag set - ask which month to clear
-    flag = prompt("Enter month to clear (e.g. 2026-05):", "2026-05");
-    if(!flag) return;
-  }
-  var all = JSON.parse(localStorage.getItem("org_rpts") || "{}");
-  var count = 0;
-  Object.keys(all).forEach(function(k){
-    if(all[k].date && all[k].date.indexOf(flag)===0){ delete all[k]; count++; }
-  });
-  if(count === 0){ alert("No reports found for " + flag); return; }
-  if(!confirm("Clear " + count + " reports for " + flag + " from this device?\n(They are safely archived in Google Drive)")) return;
-  localStorage.setItem("org_rpts", JSON.stringify(all));
-  rfRpts();
-  alert("✓ Cleared " + count + " reports for " + flag);
-}
+/* The office "Month End" button and the clear-archived-month tool were removed on
+   11/09/2026. Both deleted a month's reports off the device without asking
+   the office whether it held them, and the button marked the CURRENT month
+   as archived - pressed on the 1st, the sheet would have refused every new
+   report that month. Month end now runs by itself in Apps Script, and a
+   report only leaves a phone once the office confirms it (reconcileReports). */
 
 function retrySyncAll(){
   var rpts=loadRpts();
@@ -4904,26 +4908,12 @@ function init(){
     window.TECH_LOCK="";
   }
   g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
-  // Purge old-month reports from localStorage on every load
-  (function(){
-    var now=new Date();
-    var curMonth=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
-    var all=JSON.parse(localStorage.getItem("org_rpts")||"{}");
-    var purged=0;
-    Object.keys(all).forEach(function(k){
-      var d=String(all[k].date||"").substring(0,7);
-      if(d&&d!==curMonth){delete all[k];purged++;}
-    });
-    if(purged>0){
-      localStorage.setItem("org_rpts",JSON.stringify(all));
-      console.log("Purged "+purged+" reports from previous months");
-    }
-  })();
-  // Show month-end button only on management view
-  if(!window.TECH_LOCK){
-    var meb=g("month-end-btn");if(meb)meb.style.display="inline-block";
-    var cml=g("clear-month-link");if(cml)cml.style.display="inline";
-  }
+  // Last month's reports are no longer purged on load. That purge deleted
+  // every report dated in an earlier month the first time the platform
+  // opened in a new month - including any that had never reached the office
+  // - and it ran before anything could sync them. It is the likeliest way
+  // Vuyo's three Kameeldrift reports of 28/08/2026 were lost.
+  // reconcileReports() now drops an old report only once the office holds it.
   // Check for rollover signal (techs only, after short delay)
   if(window.TECH_LOCK){
     setTimeout(checkRolloverFlag, 2000);
