@@ -3712,9 +3712,16 @@ function reconcileReports(){
   });
 }
 function finishReconcile_(rpts,held,months,cur,tech,key){
-  var inScope=Object.keys(rpts).filter(function(rno){
+  var allScope=Object.keys(rpts).filter(function(rno){
     var d=rpts[rno];
     return d&&d.date&&months.indexOf(String(d.date).substring(0,7))>=0;
+  });
+  // A phone can hold a copy of other technicians' reports too - Patrick's
+  // held all 110 of September's on 11/09/2026. Those are cleared once the
+  // office confirms them, but never re-sent, and never counted as his.
+  var inScope=allScope.filter(function(rno){
+    var k=rpts[rno].techKey;
+    return !tech||!k||k===tech;
   });
   var missing=inScope.filter(function(rno){return !held[key(rno,rpts[rno].date)];});
   // The office device holds a copy of the sheet, not reports of its own -
@@ -3753,7 +3760,7 @@ function finishReconcile_(rpts,held,months,cur,tech,key){
     // Only a report the office confirms may leave the phone - and only one
     // from an earlier month; this month's stay in Saved reports.
     var confirmed={};
-    inScope.forEach(function(rno){
+    allScope.forEach(function(rno){
       if(held[key(rno,rpts[rno].date)]||sent[rno])confirmed[rno]=true;
     });
     var all=JSON.parse(localStorage.getItem("org_rpts")||"{}"),dropped=0;
