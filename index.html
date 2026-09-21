@@ -3192,6 +3192,7 @@ function parkRpt(){
           errors.map(function(e,i){return (i+1)+". "+e;}).join("\n"));
     return;
   }
+  if(!confirmLateWriteUp()) return;
   var btn=g("parkbtn");btn.disabled=true;btn.textContent="Saving...";
   try{
     var d=collect();
@@ -3313,11 +3314,61 @@ function submitPending(){
    requireSig is false only when parking a report for later signature -
    every other rule still applies, so a parked report is a COMPLETE report
    that is missing nothing but the signature. */
+/* How many days ago the service date is. Negative means it is in the future.
+   One definition shared by the future-date rejection and the late write-up
+   warning, so the two can never disagree about what "late" means. */
+var LATE_WRITEUP_DAYS=7;
+function svcDateAge(){
+  var v=g("svcd").value;
+  if(!v) return null;
+  var svc=new Date(v+"T00:00:00"),today=new Date();
+  today.setHours(0,0,0,0);
+  return Math.round((today-svc)/86400000);
+}
+
+/* A visit written up more than a week later is RECORDED, never refused
+   (Larry, 21/09/2026). Refusing it would leave real work with no report at
+   all - worse than a late one, and the office could no longer invoice against
+   it. So the technician acknowledges it and the report saves normally.
+
+   Nothing new has to be stored to flag it: the Reports sheet already carries
+   the service date AND Submitted At, so every late write-up is visible to the
+   office from data it already holds. Vuyo's three August reports, written up
+   on 10, 15 and 17 September, would each have raised this. */
+function confirmLateWriteUp(){
+  var age=svcDateAge();
+  if(age===null||age<=LATE_WRITEUP_DAYS) return true;
+  return confirm("This visit was "+age+" days ago.\n\nA report should be "+
+    "completed within "+LATE_WRITEUP_DAYS+" days of the visit. It will still "+
+    "be saved, and the office will see that it was written up late.\n\n"+
+    "Save it now?");
+}
+
 function validateReport(requireSig){
   var errors=[];
   if(!selC) errors.push("Customer name must be selected");
   if(g("cs").value==="NEW"&&!g("new-cust-name").value.trim()) errors.push("Please enter the new customer name");
   if(!g("svcd").value) errors.push("Service date must be entered");
+  else{
+    /* A service date in the future is a typing mistake and IS refused, because
+       the technician can correct it on the spot and because the alternative is
+       silent: ORG-75781 (Wingate Park) was dated 2026-10-31 but written up at
+       06:17 on 1 September, so a real August visit sat two months ahead, out
+       of reach of every month end, and its customer read as invoiced with no
+       report. A LATE write-up is handled differently - see confirmLateWriteUp.
+
+       One day of slack, so a device whose clock has run ahead cannot block a
+       technician writing up the job he has just finished.
+
+       CAPTURE TIME ONLY. validateReport is called from parkRpt and doSubmit
+       and nowhere else - the retry-sync path re-sends a stored report without
+       validating - so a report entered on time that syncs days later is still
+       accepted. Rejecting on sync would destroy real work: incident 13. */
+    var _age=svcDateAge();
+    if(_age!==null&&_age<-1) errors.push("Service date "+g("svcd").value+
+      " is in the future. Please enter the date the service was actually "+
+      "carried out.");
+  }
   var tin=g("tin").value,tout=g("tout").value;
   if(!tin) errors.push("Time in must be entered");
   if(!tout) errors.push("Time out must be entered");
@@ -3357,6 +3408,7 @@ function doSubmit(){
     alert("Please complete the following before submitting:\n\n"+errors.map(function(e,i){return (i+1)+". "+e;}).join("\n"));
     return;
   }
+  if(!confirmLateWriteUp()) return;
   var btn=g("subbtn");btn.disabled=true;btn.textContent="Saving...";
   try{
     var d=collect();saveRpt(d);markPlannerDoneNew(d);updateReconFromRpt(d);
