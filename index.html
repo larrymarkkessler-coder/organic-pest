@@ -3758,7 +3758,13 @@ function reconcileReports(){
       })
       .then(function(){
         if(++done<months.length)return;
-        if(failed){console.log("Report reconcile: skipped, office unreadable");return;}
+        if(failed){
+          console.log("Report reconcile: skipped, office unreadable");
+          // Nothing may be sent and nothing can be confirmed - but the office
+          // still needs to know this phone tried and could not get through.
+          if(tech)checkInUnverified_(rpts,months,tech);
+          return;
+        }
         finishReconcile_(rpts,held,months,cur,tech,key);
       });
   });
@@ -3827,13 +3833,13 @@ function finishReconcile_(rpts,held,months,cur,tech,key){
     }
     console.log("Report reconcile: finished");
     try{rfRpts();}catch(e){}
-    if(tech)checkInDevice_(rpts,inScope,confirmed,months,tech);
+    if(tech)checkInDevice_(rpts,inScope,confirmed,months,tech,held,key);
   })();
 }
 /* Tell the office how complete this phone is, month by month. Parked reports
    (Save & sign later) are unsigned and unsent, so they count as outstanding -
    exactly the case a month-end check most needs to see. */
-function checkInDevice_(rpts,inScope,confirmed,months,tech){
+function checkInDevice_(rpts,inScope,confirmed,months,tech,held,key){
   var per={};
   months.forEach(function(m){per[m]={month:m,onPhone:0,confirmed:0,outstanding:[]};});
   inScope.forEach(function(rno){
@@ -3845,10 +3851,52 @@ function checkInDevice_(rpts,inScope,confirmed,months,tech){
   try{
     var parked=JSON.parse(localStorage.getItem("org_pending")||"{}");
     Object.keys(parked).forEach(function(rno){
-      var m=String((parked[rno]||{}).date||"").substring(0,7);
-      if(per[m]){per[m].onPhone++;per[m].outstanding.push(rno+" (awaiting signature)");}
+      var d=parked[rno]||{};
+      var m=String(d.date||"").substring(0,7);
+      if(!per[m])return;
+      per[m].onPhone++;
+      /* A parked report the office ALREADY holds is NOT outstanding. This
+         used to report every parked report as outstanding for ever, whatever
+         the office had: on 23/09/2026 ORG-36293 was listed as outstanding
+         while sitting in the Reports sheet. A permanent false alarm is worse
+         than none, because it makes a real one look like the usual noise. */
+      if(confirmed[rno]||(held&&key&&held[key(rno,d.date)]))per[m].confirmed++;
+      else per[m].outstanding.push(rno+" (awaiting signature)");
     });
   }catch(e){}
+  postCheckIn_(per,tech);
+}
+
+/* The office could not be read, so nothing can be confirmed and nothing may be
+   sent. Check in ANYWAY, saying so. Before this, one unreadable month skipped
+   the whole reconcile and the check-in with it, leaving nothing but an older
+   timestamp - a phone that has gone quiet and a phone that is perfectly fine
+   looked identical, which is precisely the confusion that cost the Kameeldrift
+   reports. The counts here are what the phone holds; none of them are
+   verified, and the note says so. */
+function checkInUnverified_(rpts,months,tech){
+  var per={};
+  months.forEach(function(m){per[m]={month:m,onPhone:0,confirmed:0,
+    outstanding:["(could not reach the office - not verified)"]};});
+  Object.keys(rpts).forEach(function(rno){
+    var d=rpts[rno];
+    if(!d||!d.date)return;
+    var k=d.techKey;
+    if(tech&&k&&k!==tech)return;
+    var m=String(d.date).substring(0,7);
+    if(per[m])per[m].onPhone++;
+  });
+  try{
+    var parked=JSON.parse(localStorage.getItem("org_pending")||"{}");
+    Object.keys(parked).forEach(function(rno){
+      var m=String((parked[rno]||{}).date||"").substring(0,7);
+      if(per[m])per[m].onPhone++;
+    });
+  }catch(e){}
+  postCheckIn_(per,tech);
+}
+
+function postCheckIn_(per,tech){
   var fd=new FormData();
   fd.append("payload",JSON.stringify({action:"deviceCheckIn",techKey:tech,
     techName:(typeof TECH_SHORT!=="undefined"&&TECH_SHORT[tech])||tech,
