@@ -145,33 +145,12 @@ td input,td select{padding:5px;font-size:11px;border-radius:5px;width:auto}
 <div style="display:flex;align-items:center;gap:8px"><div class="navtabs">
 <button class="navbtn active" onclick="sw('form',this)">Service</button>
 <button class="navbtn" onclick="sw('planner',this)">Planner</button>
-<button class="navbtn" id="stock-in-btn" onclick="sw('stockin',this)" style="display:none">Stock In</button>
 <button class="navbtn" id="stock-count-btn" onclick="sw('stockcount',this)">Stock Count</button>
 
 
 
 </div><span style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.2);padding:3px 7px;border-radius:5px" id="rno">--</span></div></div>
 <div class="stbar"><span style="color:#2ecc71;font-weight:bold">&#9679;</span> Ready &nbsp;|&nbsp; Reports: <span id="rcnt">0</span> &nbsp;|&nbsp; <span onclick="syncFromSheets()" style="cursor:pointer;text-decoration:underline;color:#aef">Sync from Sheets</span></div>
-
-<div id="panel-stockin" class="panel">
-<div class="card"><div class="chd">STOCK ISSUED TO TECHNICIAN (OFFICE)</div><div class="cbd">
-<p style="font-size:11px;color:#555;margin:0 0 8px">
-Record stock at the moment it is handed over. Without this the office cannot
-tell what a technician is holding &mdash; what has been used is only part of
-the picture, and a month-end count would show the difference as a variance.
-Enter the quantity in the unit shown beside each item.</p>
-<div style="display:flex;gap:10px;flex-wrap:wrap">
-<div class="fld" style="max-width:220px"><label>Issued to</label>
-<select id="si-tech"><option value="">Select technician...</option></select></div>
-<div class="fld" style="max-width:200px"><label>Date issued</label>
-<select id="si-date"></select></div></div>
-<div id="si-body"></div>
-<button class="addb" onclick="addStockRow('si-body')">+ Add item</button>
-<div style="margin-top:10px">
-<button class="btn" id="si-submit" onclick="submitStockIssue()">Submit issue</button>
-<span id="si-status" style="margin-left:10px;font-size:12px"></span></div>
-<div id="si-list"></div>
-</div></div></div>
 
 <div id="panel-stockcount" class="panel">
 <div class="card"><div class="chd">MONTH-END STOCK COUNT</div><div class="cbd">
@@ -2179,23 +2158,6 @@ function stockPost(payload,btn,statusEl,okMsg,after){
                      " - try again when you have signal.";
     });
 }
-function submitStockIssue(){
-  var c=collectStockRows("si-body");
-  var st=g("si-status");st.style.color="#c0392b";
-  if(c.dupe){st.textContent="The same item is listed twice - please combine it.";return;}
-  if(!c.lines.length){st.textContent="Add at least one item.";return;}
-  var zero=c.lines.filter(function(l){return !(l.qty>0);});
-  if(zero.length){st.textContent="Enter a quantity for every item listed.";return;}
-  var tk=g("si-tech").value;
-  if(!tk){st.textContent="Choose the technician the stock was issued to.";return;}
-  stockPost({action:"saveStockIssue",date:g("si-date").value,
-             techKey:tk,techName:TECH_SHORT[tk]||tk,
-             capturedBy:"office",
-             lines:c.lines,submittedAt:new Date().toISOString()},
-            "si-submit","si-status","Issue recorded. Thank you.",
-            function(){g("si-body").innerHTML="";addStockRow("si-body");
-                       g("si-tech").value="";loadIssuesByDate();});
-}
 function submitStockCount(){
   fillStockCountSelectors();
   var who=g("sc-tech").value,ym=g("sc-month").value;
@@ -2221,81 +2183,6 @@ function submitStockCount(){
               stockMarkCounted(ym);
               clearStockBlock();
             });
-}
-function fillIssueDates(){
-  var ds=g("si-date");
-  if(!ds||ds.options.length)return;
-  // Every day of the current month up to today, newest first. Issues are
-  // captured as they happen, so the office is normally choosing today or a
-  // day or two back.
-  var now=new Date();
-  var y=now.getFullYear(),m=now.getMonth();
-  for(var d=now.getDate();d>=1;d--){
-    var iso=y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
-    var o=document.createElement("option");
-    o.value=iso;
-    o.textContent=String(d).padStart(2,"0")+"/"+String(m+1).padStart(2,"0")+
-                  "/"+y+(d===now.getDate()?"  (today)":"");
-    ds.appendChild(o);
-  }
-  ds.value=y+"-"+String(m+1).padStart(2,"0")+"-"+
-           String(now.getDate()).padStart(2,"0");
-}
-/* Every issue captured this month, grouped by the date it was issued - which
-   is how the recon sums them, so this is the office's check that the total
-   they expect is the total that will be used. */
-function loadIssuesByDate(){
-  var box=g("si-list");
-  if(!box)return;
-  var now=new Date();
-  var ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
-  box.innerHTML="<div style='font-size:11px;color:#777'>Loading "+
-                monthLabel(ym)+" issues...</div>";
-  var fd=new FormData();
-  fd.append("payload",JSON.stringify({action:"getStockIssues",month:ym}));
-  fetch(GAS_URL,{method:"POST",body:fd})
-    .then(function(r){return r.json();})
-    .then(function(res){
-      if(!res||res.status!=="ok"){
-        box.innerHTML="<div style='font-size:11px;color:#8a6d1a'>"+
-          "Issue history unavailable - the getStockIssues action may not be "+
-          "deployed yet.</div>";
-        return;
-      }
-      var rows=res.rows||[];
-      if(!rows.length){
-        box.innerHTML="<div style='font-size:11px;color:#777'>No issues "+
-          "captured yet for "+monthLabel(ym)+".</div>";
-        return;
-      }
-      var byDate={};
-      rows.forEach(function(r){
-        var d=String(r[0]||"").substring(0,10);
-        (byDate[d]=byDate[d]||[]).push(r);
-      });
-      var h="<div style='font-size:11px;font-weight:bold;color:#1a5c38;"+
-            "margin:14px 0 6px'>ISSUES CAPTURED THIS MONTH ("+rows.length+
-            " line"+(rows.length===1?"":"s")+")</div>";
-      Object.keys(byDate).sort().reverse().forEach(function(d){
-        var p=d.split("-");
-        h+="<div style='margin-top:8px'><div style='font-size:11px;"+
-           "font-weight:bold;color:#2d7a50'>"+
-           (p.length===3?p[2]+"/"+p[1]+"/"+p[0]:d)+"</div>"+
-           "<table style='width:100%;border-collapse:collapse'>";
-        byDate[d].forEach(function(r){
-          h+="<tr><td style='padding:2px 4px;font-size:11px'>"+esc(r[2])+
-             "</td><td style='padding:2px 4px;font-size:11px'>"+esc(r[4])+
-             "</td><td style='padding:2px 4px;font-size:11px;text-align:right;"+
-             "font-weight:bold'>"+r[6]+" "+esc(r[5])+"</td></tr>";
-        });
-        h+="</table></div>";
-      });
-      box.innerHTML=h;
-    })
-    .catch(function(e){
-      box.innerHTML="<div style='font-size:11px;color:#c0392b'>Could not "+
-        "load issue history: "+esc(e.message)+"</div>";
-    });
 }
 function fillStockCountSelectors(){
   var ts=g("sc-tech");
@@ -2407,19 +2294,6 @@ function applyStockBlock(){
                    "count is submitted. Open Stock Count to do it now.";
   note.style.display=blocked?"block":"none";
 }
-function showOfficeStockScreen(){
-  // Issues are captured by the office, never by the person receiving them.
-  // The button starts hidden and is revealed only for the office, so a
-  // technician cannot glimpse it and a failure here leaves it hidden.
-  var b=g("stock-in-btn");
-  if(!b)return;
-  if(window.TECH_LOCK){
-    b.style.display="none";
-    var p=g("panel-stockin");if(p)p.classList.remove("active");
-  }else{
-    b.style.display="";
-  }
-}
 /* Preview: ?stockpreview=1&as=VUYO
    Applies a technician lock to the real screen so the block, the list and
    the validation all behave exactly as they will tomorrow morning. */
@@ -2443,7 +2317,6 @@ function startStockPreview(){
   return true;
 }
 function checkStockCount(){
-  showOfficeStockScreen();
   if(!window.TECH_LOCK)return;              // office view is never blocked
   var ym=stockCountMonth();
   if(!stockCountDue()){
@@ -2487,17 +2360,6 @@ function sw(id,btn){
   if(id==="planner"){buildTechFilters();loadPlannerFromSheets();}
   if(id==="digest"){g("ddate").valueAsDate=new Date();}
   if(id==="recon"){renderRecon();}
-  if(id==="stockin"&&!g("si-body").children.length){
-    fillIssueDates();
-    var ts=g("si-tech");
-    if(ts&&ts.options.length<2){
-      Object.keys(TECH_SHORT).forEach(function(k){
-        if(k==="LARRY")return;                       // the test account
-        var o=document.createElement("option");
-        o.value=k;o.textContent=TECH_SHORT[k];ts.appendChild(o);
-      });
-    }
-    addStockRow("si-body");loadIssuesByDate();}
   if(id==="stockcount"&&!g("sc-body").children.length){
     fillStockCountSelectors();addStockRow("sc-body");}
 }
@@ -5172,7 +5034,6 @@ g("cs").addEventListener("change",function(){
   setTimeout(retrySyncPending,3000);
   setTimeout(retryPdfUploads,5000);
   startStockPreview();
-  showOfficeStockScreen();
   setTimeout(checkStockCount,2500);
   // Reports first: a report must reach the office before its PDF is filed.
   setTimeout(reconcileReports,5000);
