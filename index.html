@@ -3921,6 +3921,36 @@ function loadPlannerFromSheets(){
       buildPlannerFromLocal();
     });
 }
+// Residential bookings (06/11/2026): customers booked on book.html are added
+// to the customer and planner-name lists live, so a technician can pick
+// "<Name> (RES-0001)" without a platform release. The name is exactly the
+// planner job's, so the report crosses it off like any contracted customer.
+// Appended to the END of CD - existing indexes never move.
+var RES_ADDED={},resLoadedAt=0;
+function loadResidentialCustomers(){
+  if(typeof GAS_URL==="undefined"||!GAS_URL)return;
+  resLoadedAt=Date.now();
+  fetch(GAS_URL+"?action=getResidential&t="+Date.now())
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d||d.status!=="ok"||!d.bookings)return;
+      var cutoff=new Date(Date.now()-35*864e5).toISOString().substring(0,10);
+      var cs=g("cs"),ps=g("plan-sel");
+      d.bookings.forEach(function(b){
+        var name=b["Customer"];
+        if(!name||RES_ADDED[name])return;
+        if(b["Status"]==="Cancelled"||String(b["Date"])<cutoff)return;
+        RES_ADDED[name]=true;
+        CD.push([name,b["Address"]||"","Residential",""]);
+        if(cs){var o=document.createElement("option");o.value=String(CD.length-1);o.text=name;
+          var after=cs.querySelector("option[value=NEW]");
+          cs.insertBefore(o,after?after.nextSibling:null);}
+        if(ps){var p=document.createElement("option");p.value=name;p.text=name;
+          ps.insertBefore(p,ps.options[1]||null);}
+      });
+    })
+    .catch(function(e){console.log("Residential list fetch failed:",e.message);});
+}
 function buildPlannerFromLocal(){
   plannerJobs=[];
   Object.keys(PLAN).forEach(function(tk){
@@ -4214,7 +4244,8 @@ function findSamePositionNextMonth(dateStr){
 
 function rollForward(){
   var monthStr=calYear+"-"+String(calMonth+1).padStart(2,"0");
-  var currentJobs=plannerJobs.filter(function(j){return j.date.indexOf(monthStr)===0;});
+  // Once-off residential bookings (RES-) never repeat into the next month
+  var currentJobs=plannerJobs.filter(function(j){return j.date.indexOf(monthStr)===0&&j.frequency!=="Once-off";});
   if(!currentJobs.length){alert("No jobs in current month to roll forward.");return;}
   var nm=calMonth+1,ny=calYear;if(nm>11){nm=0;ny++;}
   var nextMonthStr=ny+"-"+String(nm+1).padStart(2,"0");
@@ -5039,6 +5070,10 @@ g("cs").addEventListener("change",function(){
   initSig();areaCnt=0;addArea();rfRpts();rfPending();setTimeout(function(){addILTRow();},100);
   setTimeout(syncFromSheets,1500);
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
+  setTimeout(loadResidentialCustomers,2500);
+  // A job booked while the platform is open: refresh on opening either list
+  ["cs","plan-sel"].forEach(function(id){var el=g(id);if(el)el.addEventListener("focus",function(){
+    if(Date.now()-resLoadedAt>120000)loadResidentialCustomers();});});
   setTimeout(retrySyncPending,3000);
   setTimeout(retryPdfUploads,5000);
   startStockPreview();

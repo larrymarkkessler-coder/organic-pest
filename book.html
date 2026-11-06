@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1a5c38">
+<title>Residential Booking</title>
+<!--
+  Residential Booking (06/11/2026). Anyone in the office books a short-notice
+  residential job from a phone:
+    - addResidentialBooking puts it on the Residential Bookings tab AND the
+      technician's live Planner ("<Name> (RES-0001)"), and the platform's
+      customer list picks it up (index.html loadResidentialCustomers);
+    - the booker sends the technician the job by WhatsApp from their own phone
+      (a pre-written wa.me message - nothing is sent automatically);
+    - the report marks it Serviced and emails Larry, Wayne and Veronica to
+      invoice; "Awaiting invoice" here records the Sage invoice number.
+  The day list shows each job already on the technician's planner with its
+  estimated time (job_times.json, last month's report PDFs) against 8 hours.
+  ?invoice=RES-0001 opens that booking's invoice form (link in the email).
+  ?test=1 adds the LARRY test account to the technician list.
+-->
+<style>
+:root{--g:#1a5c38;--g2:#2d7a50;--lt:#f0f9f4;--bd:#d6e4dc;--tx:#1d2a22;--mut:#5f6f66;--red:#c0392b;--amb:#b7791f;--bg:#f4f6f5;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--tx);font-size:15px}
+header{background:var(--g);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:18px}
+header div{font-size:12px;color:#a8d5b5;margin-top:2px}
+nav{display:flex;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+nav button{flex:1;border:0;background:none;padding:12px 4px;font-size:13px;font-weight:bold;color:var(--mut);border-bottom:3px solid transparent}
+nav button.on{color:var(--g);border-bottom-color:var(--g)}
+nav .cnt{display:inline-block;min-width:18px;padding:1px 5px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;margin-left:4px}
+main{padding:12px 16px 40px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:14px;margin-bottom:12px}
+.card h2{font-size:13px;text-transform:uppercase;color:var(--g);margin:0 0 10px}
+label{display:block;font-size:12px;font-weight:bold;color:var(--mut);margin:10px 0 4px}
+label .req{color:var(--red)}
+input,select,textarea{width:100%;padding:11px 10px;font-size:16px;border:1px solid #c9d6ce;border-radius:6px;background:#fff;color:var(--tx);font-family:inherit}
+textarea{min-height:70px;resize:vertical}
+.two{display:flex;gap:10px}.two>div{flex:1;min-width:0}
+.hint{font-size:12px;color:var(--mut);margin-top:4px}
+.btn{display:block;width:100%;padding:14px;font-size:16px;font-weight:bold;border:0;border-radius:8px;background:var(--g);color:#fff;margin-top:14px;text-align:center;text-decoration:none}
+.btn:disabled{opacity:.5}
+.btn.wa{background:#25d366}
+.btn.sec{background:#fff;color:var(--g);border:1px solid var(--g)}
+.btn.sm{display:inline-block;width:auto;padding:8px 12px;font-size:13px;margin:6px 6px 0 0}
+.btn.red{background:#fff;color:var(--red);border:1px solid var(--red)}
+.day{font-size:14px}
+.day table{width:100%;border-collapse:collapse}
+.day td{padding:6px 2px;border-bottom:1px solid #eef2ef;vertical-align:top}
+.day td.t{text-align:right;white-space:nowrap;color:var(--mut)}
+.day tr.res td{color:var(--g2);font-weight:bold}
+.day tr.done td{text-decoration:line-through;color:#9aa8a0}
+.bar{height:10px;background:#e3ebe6;border-radius:5px;overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;background:var(--g2)}
+.bar i.amb{background:var(--amb)}.bar i.red{background:var(--red)}
+.tot{display:flex;justify-content:space-between;font-weight:bold;font-size:14px}
+.msg{padding:10px 12px;border-radius:6px;margin-top:10px;font-size:14px}
+.msg.err{background:#fdecea;color:var(--red)}
+.msg.ok{background:var(--lt);color:var(--g)}
+.msg.warn{background:#fff6e0;color:#8a5a00}
+.bk{border-left:4px solid var(--g2)}
+.bk.hl{box-shadow:0 0 0 2px var(--amb)}
+.bk .top{display:flex;justify-content:space-between;gap:8px;font-weight:bold}
+.bk .st{font-size:12px;padding:2px 8px;border-radius:10px;background:#e3ebe6;white-space:nowrap}
+.bk .st.Serviced{background:#fff1d6;color:#8a5a00}.bk .st.Invoiced{background:var(--lt);color:var(--g)}.bk .st.Cancelled{background:#eee;color:#777}
+.bk .ln{font-size:13px;color:var(--mut);margin-top:3px}
+.hide{display:none}
+.empty{color:var(--mut);text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<header><h1>Residential Booking</h1><div>Organic Pest Prevention Services</div></header>
+<nav>
+  <button id="t-new" class="on" onclick="tab('new')">New booking</button>
+  <button id="t-inv" onclick="tab('inv')">Awaiting invoice<span id="c-inv" class="cnt hide">0</span></button>
+  <button id="t-all" onclick="tab('all')">All bookings</button>
+</nav>
+<main>
+
+<section id="p-new">
+  <div class="card">
+    <h2>Customer</h2>
+    <div class="two">
+      <div><label>Name <span class="req">*</span></label><input id="f-first" autocomplete="off"></div>
+      <div><label>Surname <span class="req">*</span></label><input id="f-sur" autocomplete="off"></div>
+    </div>
+    <label>Cell number <span class="req">*</span></label><input id="f-phone" type="tel" placeholder="e.g. 082 123 4567">
+    <label>Address <span class="req">*</span></label><textarea id="f-addr" placeholder="Street, suburb (estate / unit number)"></textarea>
+    <label>Invoice to</label><input id="f-invto" placeholder="Leave blank to invoice the customer">
+    <div class="hint">A company or partner name, if Sage should be invoiced under a different name.</div>
+  </div>
+
+  <div class="card">
+    <h2>Job</h2>
+    <label>Treatment <span class="req">*</span></label>
+    <select id="f-treat">
+      <option value="">-- Select treatment --</option>
+      <option>Rodent control</option><option>Cockroach treatment</option>
+      <option>Termite &amp; wood borer</option><option>Ants &amp; crawling insects</option>
+      <option>Bed bug eradication</option><option>Flies &amp; mosquitoes</option>
+      <option>Bee &amp; wasp removal</option><option>Fogging &amp; fumigation</option>
+      <option>General pest treatment</option><option>Inspection</option>
+    </select>
+    <div class="two">
+      <div><label>Date <span class="req">*</span></label><input id="f-date" type="date"></div>
+      <div><label>Time <span class="req">*</span></label><input id="f-time" type="time" step="900"></div>
+    </div>
+    <label>Technician <span class="req">*</span></label>
+    <select id="f-tech"><option value="">-- Select technician --</option></select>
+    <div id="day" class="day hint">Pick a date to see each technician's day.</div>
+    <label>Notes for the technician</label>
+    <textarea id="f-notes" placeholder="e.g. Estate gate PIN 4471, ask for Mrs Smith at the guardhouse; dog in the yard"></textarea>
+  </div>
+
+  <div class="card">
+    <label>Booked by <span class="req">*</span></label>
+    <select id="f-by"><option value="">-- Who is booking? --</option><option>Larry</option><option>Wayne</option><option>Veronica</option><option value="OTHER">Someone else</option></select>
+    <input id="f-by2" class="hide" placeholder="Your name" style="margin-top:8px">
+    <button id="b-book" class="btn" onclick="book()">Book job</button>
+    <div id="m-book"></div>
+  </div>
+</section>
+
+<section id="p-inv" class="hide"><div id="l-inv"><div class="empty">Loading...</div></div></section>
+<section id="p-all" class="hide">
+  <input id="q" placeholder="Search name, address, RES number..." oninput="renderAll()" style="margin-bottom:12px">
+  <div id="l-all"><div class="empty">Loading...</div></div>
+</section>
+</main>
+
+<script>
+var GAS_URL="https://script.google.com/macros/s/AKfycbwZMNTB8DpvQnqQvodKC0KFLXnVm-2QdhD0DtiF4ow5aR6JgM_fR-UtmpePsCo4lBce/exec";
+var Q=new URLSearchParams(location.search);
+// Technician key (planner) -> display name and cell number (Larry, 06/11/2026)
+var TECHS=[["MATHEWES","Mathewes","0760788331"],["CLAYTON","Clayton","0710280010"],
+  ["ITUMELENG","Itumeleng","0674487636"],["LEICESTER","Leicester","0699360033"],
+  ["PATRICK","Patrick","0689881696"],["SHERMAN","Sherman","0782154731"],
+  ["STEVEN","Steven","0816110769"],["VUYO","Vuyo","0649804175"],["LAWRENCE","Lawrence","0718119929"]];
+if(Q.get("test")==="1")TECHS.push(["LARRY","Larry (TEST)","0000000000"]);
+var DAY_MIN=480, RES_MIN=60;
+var planner=[], times={}, bookings=[], plannerOk=false;
+function g(id){return document.getElementById(id);}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function hm(m){m=Math.round(m);return Math.floor(m/60)+"h "+String(m%60).padStart(2,"0");}
+function dmy(iso){var p=String(iso||"").split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:iso;}
+function wd(iso){return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(iso+"T12:00:00").getDay()];}
+function lsGet(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function techName(key){
+  // the display name the live planner already uses for this key (most common)
+  var c={};planner.forEach(function(j){if(j.techKey===key&&j.techName)c[j.techName]=(c[j.techName]||0)+1;});
+  var best="",n=0;Object.keys(c).forEach(function(k){if(c[k]>n){n=c[k];best=k;}});
+  if(best)return best;
+  for(var i=0;i<TECHS.length;i++)if(TECHS[i][0]===key)return TECHS[i][1];return key;
+}
+function post(payload){
+  var fd=new FormData();fd.append("payload",JSON.stringify(payload));
+  return fetch(GAS_URL,{method:"POST",body:fd}).then(function(r){return r.json();});
+}
+function tab(t){
+  ["new","inv","all"].forEach(function(x){g("p-"+x).classList.toggle("hide",x!==t);g("t-"+x).classList.toggle("on",x===t);});
+  if(t!=="new")loadBookings();
+}
+
+// ── data ──────────────────────────────────────────────────────────────
+function loadPlanner(){
+  return fetch(GAS_URL+"?action=getPlanner&t="+Date.now()).then(function(r){return r.json();})
+    .then(function(d){planner=(d&&d.jobs)||[];plannerOk=true;renderDay();})
+    .catch(function(){g("day").innerHTML="<div class='msg err'>Could not load the planner - check your signal and reopen the page.</div>";});
+}
+function loadTimes(){
+  return fetch("job_times.json?t="+Date.now()).then(function(r){return r.json();})
+    .then(function(d){times=(d&&d.minutes)||{};renderDay();}).catch(function(){});
+}
+function loadBookings(){
+  return fetch(GAS_URL+"?action=getResidential&t="+Date.now()).then(function(r){return r.json();})
+    .then(function(d){bookings=(d&&d.bookings)||[];renderInv();renderAll();})
+    .catch(function(){g("l-inv").innerHTML=g("l-all").innerHTML="<div class='msg err'>Could not load bookings.</div>";});
+}
+
+// ── the technician's day ──────────────────────────────────────────────
+function jobsOn(date,key){return planner.filter(function(j){return j.date===date&&j.techKey===key;});}
+function est(j){
+  if(/\(RES-\d+\)$/.test(j.customer))return RES_MIN;
+  return times[j.customer]||0;
+}
+function resTime(j){var m=/^Residential RES-\d+ \| (\d{1,2}:\d{2})/.exec(j.notes||"");return m?m[1]:"";}
+function renderDay(){
+  var date=g("f-date").value, sel=g("f-tech"), key=sel.value;
+  // technician dropdown: each one's day at a glance
+  for(var i=1;i<sel.options.length;i++){
+    var o=sel.options[i],t=TECHS[i-1];
+    if(!date||!plannerOk){o.text=t[1];continue;}
+    var js=jobsOn(date,t[0]),m=0;js.forEach(function(j){m+=est(j);});
+    o.text=t[1]+" - "+js.length+" job"+(js.length===1?"":"s")+", "+hm(m);
+  }
+  var box=g("day");
+  if(!date){box.className="day hint";box.textContent="Pick a date to see each technician's day.";return;}
+  var dw=new Date(date+"T12:00:00").getDay(), warn=(dw===0||dw===6)?"<div class='msg warn'>"+wd(date)+" "+dmy(date)+" is a weekend - the planner is Monday to Friday.</div>":"";
+  if(!key){box.className="day";box.innerHTML=warn+"<div class='hint'>Pick a technician to see their jobs on "+wd(date)+" "+dmy(date)+".</div>";return;}
+  if(!plannerOk){box.className="day";box.innerHTML="<div class='hint'>Loading the planner...</div>";return;}
+  var js=jobsOn(date,key).slice().sort(function(a,b){var ra=resTime(a),rb=resTime(b);return (ra||"99")<(rb||"99")?-1:1;});
+  var total=0,unknown=0,rows=js.map(function(j){
+    var m=est(j);total+=m;if(!m)unknown++;
+    var isRes=/\(RES-\d+\)$/.test(j.customer),rt=resTime(j);
+    return "<tr class='"+(isRes?"res":"")+"'><td>"+esc(j.customer)+(rt?" ("+rt+")":"")+"</td><td class='t'>"+(m?hm(m)+(isRes?" est":""):"-")+"</td></tr>";
+  }).join("");
+  var pct=Math.min(100,total/DAY_MIN*100),cls=total>DAY_MIN?"red":(total>DAY_MIN*0.8?"amb":"");
+  box.className="day";
+  box.innerHTML=warn+"<label>"+esc(techName(key))+" - "+wd(date)+" "+dmy(date)+"</label>"+
+    (js.length?"<table>"+rows+"</table>":"<div class='hint'>Nothing on the planner yet.</div>")+
+    "<div class='bar'><i class='"+cls+"' style='width:"+pct+"%'></i></div>"+
+    "<div class='tot'><span>Booked "+hm(total)+" of 8h 00</span><span>"+(total>=DAY_MIN?"FULL":hm(DAY_MIN-total)+" free")+"</span></div>"+
+    (unknown?"<div class='hint'>"+unknown+" job"+(unknown===1?" has":"s have")+" no time from last month - counted as 0.</div>":"")+
+    "<div class='hint'>Times are last month's average time on site per customer.</div>";
+}
+
+// ── booking ───────────────────────────────────────────────────────────
+function newRef(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+var clientRef=newRef();
+function waNumber(n){n=String(n).replace(/\D/g,"");return n.charAt(0)==="0"?"27"+n.slice(1):n;}
+function book(){
+  var by=g("f-by").value==="OTHER"?g("f-by2").value.trim():g("f-by").value;
+  var key=g("f-tech").value, d={
+    action:"addResidentialBooking", clientRef:clientRef, bookedBy:by,
+    firstName:g("f-first").value.trim(), surname:g("f-sur").value.trim(),
+    phone:g("f-phone").value.trim(), address:g("f-addr").value.trim(),
+    invoiceTo:g("f-invto").value.trim(), treatment:g("f-treat").value,
+    date:g("f-date").value, time:g("f-time").value, techKey:key,
+    techName:key?techName(key):"", techNotes:g("f-notes").value.trim()};
+  var miss=[];
+  [["firstName","Name"],["surname","Surname"],["phone","Cell number"],["address","Address"],["treatment","Treatment"],
+   ["date","Date"],["time","Time"],["techKey","Technician"],["bookedBy","Booked by"]].forEach(function(f){if(!d[f[0]])miss.push(f[1]);});
+  var m=g("m-book");
+  if(miss.length){m.innerHTML="<div class='msg err'>Please fill in: "+miss.join(", ")+"</div>";return;}
+  if(!plannerOk){m.innerHTML="<div class='msg err'>The planner has not loaded yet - wait a moment and try again.</div>";return;}
+  lsSet("bookedBy",g("f-by").value);if(g("f-by").value==="OTHER")lsSet("bookedBy2",by);
+  var b=g("b-book");b.disabled=true;b.textContent="Booking...";m.innerHTML="";
+  post(d).then(function(r){
+    if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
+    var t=TECHS.filter(function(x){return x[0]===key;})[0];
+    var text="*New residential job - "+r.bookingNo+"*\n"+
+      "Date: "+wd(d.date)+" "+dmy(d.date)+" at "+d.time+"\n"+
+      "Customer: "+d.firstName+" "+d.surname+"\n"+
+      "Cell: "+d.phone+"\n"+
+      "Address: "+d.address+"\n"+
+      "Treatment: "+d.treatment+"\n"+
+      (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
+      "\nIt is on your planner. On the report select customer: "+r.customer;
+    var url="https://wa.me/"+waNumber(t[2])+"?text="+encodeURIComponent(text);
+    m.innerHTML="<div class='msg ok'><b>Booked "+esc(r.bookingNo)+"</b> - on "+esc(t[1])+"'s planner for "+wd(d.date)+" "+dmy(d.date)+" at "+esc(d.time)+".</div>"+
+      "<a class='btn wa' href='"+url+"' target='_blank' rel='noopener'>Send to "+esc(t[1])+" on WhatsApp</a>"+
+      "<button class='btn sec' onclick='resetForm()'>New booking</button>";
+    b.classList.add("hide");
+    planner.push({date:d.date,techKey:key,techName:d.techName,customer:r.customer,notes:"Residential "+r.bookingNo+" | "+d.time,frequency:"Once-off"});
+    renderDay();
+  }).catch(function(e){
+    m.innerHTML="<div class='msg err'>Not booked: "+esc(e.message)+". Check your signal and press Book again - it will not double-book.</div>";
+  }).then(function(){b.disabled=false;b.textContent="Book job";});
+}
+function resetForm(){
+  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time"].forEach(function(id){g(id).value="";});
+  g("f-treat").value="";g("f-tech").value="";g("m-book").innerHTML="";g("b-book").classList.remove("hide");
+  clientRef=newRef();renderDay();window.scrollTo(0,0);
+}
+
+// ── lists ─────────────────────────────────────────────────────────────
+function card(b,withInvoice){
+  var no=b["Booking No"],hl=Q.get("invoice")===no?" hl":"";
+  var h="<div class='card bk"+hl+"' id='bk-"+esc(no)+"'><div class='top'><span>"+esc(b["First Name"]+" "+b["Surname"])+"</span><span class='st "+esc(b["Status"])+"'>"+esc(b["Status"])+"</span></div>"+
+    "<div class='ln'>"+esc(no)+" &middot; "+wd(b["Date"])+" "+dmy(b["Date"])+" "+esc(b["Time"])+" &middot; "+esc(b["Tech Name"])+"</div>"+
+    "<div class='ln'>"+esc(b["Treatment"])+" &middot; "+esc(b["Address"])+"</div>"+
+    "<div class='ln'>Invoice to: <b>"+esc(b["Invoice To"])+"</b> &middot; "+esc(b["Phone"])+"</div>"+
+    (b["Report No"]?"<div class='ln'>Report "+esc(b["Report No"])+" ("+dmy(b["Serviced Date"])+")</div>":"")+
+    (b["Invoice No"]?"<div class='ln'>Invoice "+esc(b["Invoice No"])+" - "+esc(b["Invoiced By"])+", "+esc(b["Invoiced At"])+"</div>":"")+
+    (b["Cancel Note"]?"<div class='ln'>Cancelled "+esc(b["Cancel Note"])+"</div>":"")+
+    "<div class='ln'>Booked by "+esc(b["Booked By"])+", "+esc(b["Booked At"])+"</div>";
+  if(withInvoice&&(b["Status"]==="Serviced"||b["Status"]==="Booked")){
+    h+="<div class='two'><div><label>Sage invoice no.</label><input id='inv-"+esc(no)+"'></div>"+
+       "<div><label>Your name</label><input id='by-"+esc(no)+"' value='"+esc(lsGet("bookedBy2")||(lsGet("bookedBy")!=="OTHER"?lsGet("bookedBy"):""))+"'></div></div>"+
+       "<button class='btn sm' onclick=\"invoiced('"+esc(no)+"')\">Mark invoiced</button>";
+  }
+  if(b["Status"]==="Booked")h+="<button class='btn sm red' onclick=\"cancelBk('"+esc(no)+"')\">Cancel booking</button>";
+  return h+"<div id='m-"+esc(no)+"'></div></div>";
+}
+function renderInv(){
+  // serviced first (oldest first) - those are owed an invoice now
+  var due=bookings.filter(function(b){return b["Status"]==="Serviced";}).sort(function(a,b){return a["Date"]<b["Date"]?-1:1;});
+  var c=g("c-inv");c.textContent=due.length;c.classList.toggle("hide",!due.length);
+  var focus=Q.get("invoice"),extra=focus?bookings.filter(function(b){return b["Booking No"]===focus&&b["Status"]!=="Serviced";}):[];
+  g("l-inv").innerHTML=(extra.concat(due).map(function(b){return card(b,true);}).join(""))||"<div class='empty'>Nothing waiting to be invoiced.</div>";
+  if(focus){var el=g("bk-"+focus);if(el)el.scrollIntoView({block:"center"});}
+}
+function renderAll(){
+  var q=g("q").value.toLowerCase();
+  var list=bookings.filter(function(b){return !q||JSON.stringify(b).toLowerCase().indexOf(q)>=0;})
+    .sort(function(a,b){return a["Booking No"]<b["Booking No"]?1:-1;});
+  g("l-all").innerHTML=list.map(function(b){return card(b,true);}).join("")||"<div class='empty'>No bookings yet.</div>";
+}
+function invoiced(no){
+  var inv=g("inv-"+no).value.trim(),by=g("by-"+no).value.trim(),m=g("m-"+no);
+  if(!inv||!by){m.innerHTML="<div class='msg err'>Enter the Sage invoice number and your name.</div>";return;}
+  m.innerHTML="<div class='msg ok'>Saving...</div>";
+  post({action:"markResidentialInvoiced",bookingNo:no,invoiceNo:inv,by:by}).then(function(r){
+    if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
+    lsSet("bookedBy2",by);loadBookings();
+  }).catch(function(e){m.innerHTML="<div class='msg err'>"+esc(e.message)+"</div>";});
+}
+function cancelBk(no){
+  var by=prompt("Cancel "+no+" and take it off the planner?\n\nYour name:");
+  if(!by)return;
+  var reason=prompt("Reason (optional):")||"";
+  var m=g("m-"+no);m.innerHTML="<div class='msg ok'>Cancelling...</div>";
+  post({action:"cancelResidentialBooking",bookingNo:no,by:by,reason:reason}).then(function(r){
+    if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
+    planner=planner.filter(function(j){return j.customer.indexOf("("+no+")")<0;});
+    loadBookings();renderDay();
+  }).catch(function(e){m.innerHTML="<div class='msg err'>"+esc(e.message)+"</div>";});
+}
+
+// ── start ─────────────────────────────────────────────────────────────
+(function(){
+  var sel=g("f-tech");TECHS.forEach(function(t){var o=document.createElement("option");o.value=t[0];o.text=t[1];sel.appendChild(o);});
+  var tm=new Date(Date.now()+864e5);   // tomorrow, local date
+  g("f-date").value=tm.getFullYear()+"-"+String(tm.getMonth()+1).padStart(2,"0")+"-"+String(tm.getDate()).padStart(2,"0");
+  g("f-date").addEventListener("change",renderDay);sel.addEventListener("change",renderDay);
+  g("f-by").addEventListener("change",function(){g("f-by2").classList.toggle("hide",this.value!=="OTHER");});
+  var lb=lsGet("bookedBy");if(lb){g("f-by").value=lb;if(lb==="OTHER"){g("f-by2").classList.remove("hide");g("f-by2").value=lsGet("bookedBy2");}}
+  loadPlanner();loadTimes();loadBookings();
+  if(Q.get("invoice"))tab("inv");
+})();
+</script>
+</body>
+</html>
