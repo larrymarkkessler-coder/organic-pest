@@ -274,6 +274,7 @@ function card(b,withInvoice){
     "<div class='ln'>"+esc(b["Treatment"])+" &middot; "+esc(b["Address"])+"</div>"+
     "<div class='ln'>Invoice to: <b>"+esc(b["Invoice To"])+"</b> &middot; "+esc(b["Phone"])+"</div>"+
     (b["Report No"]?"<div class='ln'>Report "+esc(b["Report No"])+" ("+dmy(b["Serviced Date"])+")</div>":"")+
+    (b["Invoice Email"]?"<div class='ln'"+(/^FAILED/.test(b["Invoice Email"])?" style='color:#c0392b;font-weight:bold'":"")+">Invoice email: "+esc(b["Invoice Email"])+"</div>":"")+
     (b["Invoice No"]?"<div class='ln'>Invoice "+esc(b["Invoice No"])+" - "+esc(b["Invoiced By"])+", "+esc(b["Invoiced At"])+"</div>":"")+
     (b["Cancel Note"]?"<div class='ln'>Cancelled "+esc(b["Cancel Note"])+"</div>":"")+
     "<div class='ln'>Booked by "+esc(b["Booked By"])+", "+esc(b["Booked At"])+"</div>";
@@ -282,6 +283,7 @@ function card(b,withInvoice){
        "<div><label>Your name</label><input id='by-"+esc(no)+"' value='"+esc(lsGet("bookedBy2")||(lsGet("bookedBy")!=="OTHER"?lsGet("bookedBy"):""))+"'></div></div>"+
        "<button class='btn sm' onclick=\"invoiced('"+esc(no)+"')\">Mark invoiced</button>";
   }
+  if(b["Status"]==="Serviced")h+="<button class='btn sm sec' onclick=\"resend('"+esc(no)+"')\">Resend invoice email</button>";
   if(b["Status"]==="Booked")h+="<button class='btn sm red' onclick=\"cancelBk('"+esc(no)+"')\">Cancel booking</button>";
   return h+"<div id='m-"+esc(no)+"'></div></div>";
 }
@@ -306,6 +308,13 @@ function invoiced(no){
   post({action:"markResidentialInvoiced",bookingNo:no,invoiceNo:inv,by:by}).then(function(r){
     if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
     lsSet("bookedBy2",by);loadBookings();
+  }).catch(function(e){m.innerHTML="<div class='msg err'>"+esc(e.message)+"</div>";});
+}
+function resend(no){
+  var m=g("m-"+no);m.innerHTML="<div class='msg ok'>Sending...</div>";
+  post({action:"resendResidentialInvoiceEmail",bookingNo:no}).then(function(r){
+    if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
+    loadBookings();
   }).catch(function(e){m.innerHTML="<div class='msg err'>"+esc(e.message)+"</div>";});
 }
 function cancelBk(no){
