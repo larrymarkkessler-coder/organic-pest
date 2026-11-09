@@ -3948,11 +3948,17 @@ function loadResidentialCustomers(){
         if(b["Status"]==="Cancelled"||String(b["Date"])<cutoff)return;
         RES_ADDED[name]=true;
         CD.push([name,b["Address"]||"","Residential",""]);
-        if(cs){var o=document.createElement("option");o.value=String(CD.length-1);o.text=name;
-          var after=cs.querySelector("option[value=NEW]");
-          cs.insertBefore(o,after?after.nextSibling:null);}
-        if(ps){var p=document.createElement("option");p.value=name;p.text=name;
-          ps.insertBefore(p,ps.options[1]||null);}
+        // In alphabetical place, where people look for a name (09/11/2026)
+        function addSorted(sel,value,from){
+          var o=document.createElement("option");o.value=value;o.text=name;
+          var low=name.toLowerCase();
+          for(var i=from;i<sel.options.length;i++){
+            if(sel.options[i].text.toLowerCase()>low){sel.insertBefore(o,sel.options[i]);return;}
+          }
+          sel.appendChild(o);
+        }
+        if(cs)addSorted(cs,String(CD.length-1),2);   // after "-- Select --" and "+ Add new"
+        if(ps)addSorted(ps,name,1);
       });
     })
     .catch(function(e){console.log("Residential list fetch failed:",e.message);});
