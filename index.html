@@ -3879,7 +3879,9 @@ function reconcilePdfs(){
 }
 
 /* ── PLANNER ── */
-var calYear=2026,calMonth=5;
+// Opens on the current month. Was hard-coded to June 2026, so a job booked in
+// November looked missing until someone paged forward (09/11/2026, RES-0002).
+var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var plannerJobs=[];
 var techFilter="ALL";
 var addingToDate=null;
@@ -4019,7 +4021,9 @@ function markPlannerDoneNew(data){
   function getAliases(s){
     var aliases=[normStr(s)];
     var m=s.match(/\(([^)]+)\)/);
-    if(m){var b=m[1].replace(/\d{4,}.*$/,"");if(b.trim())aliases.push(normStr(b));}
+    // "(RES-0001)" is a booking number, not a name: as an alias it became "res",
+    // so one residential report crossed off every residential job that month.
+    if(m&&!/^RES-\d+$/.test(m[1])){var b=m[1].replace(/\d{4,}.*$/,"");if(b.trim())aliases.push(normStr(b));}
     var m2=s.match(/t\s*\/\s*a\s+(.+)$/i);
     if(m2)aliases.push(normStr(m2[1]));
     var parts=s.split(" - ");

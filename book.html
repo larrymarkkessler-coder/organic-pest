@@ -251,6 +251,7 @@ function book(){
       "\nIt is on your planner. On the report select customer: "+r.customer;
     var url="https://wa.me/"+waNumber(t[2])+"?text="+encodeURIComponent(text);
     m.innerHTML="<div class='msg ok'><b>Booked "+esc(r.bookingNo)+"</b> - on "+esc(t[1])+"'s planner for "+wd(d.date)+" "+dmy(d.date)+" at "+esc(d.time)+".</div>"+
+      (/^FAILED/.test(r.bookingEmail||"")?"<div class='msg err'>The office email did not send: "+esc(r.bookingEmail)+"</div>":"")+
       "<a class='btn wa' href='"+url+"' target='_blank' rel='noopener'>Send to "+esc(t[1])+" on WhatsApp</a>"+
       "<button class='btn sec' onclick='resetForm()'>New booking</button>";
     b.classList.add("hide");
@@ -274,6 +275,7 @@ function card(b,withInvoice){
     "<div class='ln'>"+esc(b["Treatment"])+" &middot; "+esc(b["Address"])+"</div>"+
     "<div class='ln'>Invoice to: <b>"+esc(b["Invoice To"])+"</b> &middot; "+esc(b["Phone"])+"</div>"+
     (b["Report No"]?"<div class='ln'>Report "+esc(b["Report No"])+" ("+dmy(b["Serviced Date"])+")</div>":"")+
+    (b["Booking Email"]?"<div class='ln'"+(/^FAILED/.test(b["Booking Email"])?" style='color:#c0392b;font-weight:bold'":"")+">Booking email: "+esc(b["Booking Email"])+"</div>":"")+
     (b["Invoice Email"]?"<div class='ln'"+(/^FAILED/.test(b["Invoice Email"])?" style='color:#c0392b;font-weight:bold'":"")+">Invoice email: "+esc(b["Invoice Email"])+"</div>":"")+
     (b["Invoice No"]?"<div class='ln'>Invoice "+esc(b["Invoice No"])+" - "+esc(b["Invoiced By"])+", "+esc(b["Invoiced At"])+"</div>":"")+
     (b["Cancel Note"]?"<div class='ln'>Cancelled "+esc(b["Cancel Note"])+"</div>":"")+
