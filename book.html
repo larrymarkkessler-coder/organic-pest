@@ -12,7 +12,9 @@
       technician's live Planner ("<Name> (RES-0001)"), and the platform's
       customer list picks it up (index.html loadResidentialCustomers);
     - the booker sends the technician the job by WhatsApp from their own phone
-      (a pre-written wa.me message - nothing is sent automatically);
+      (a pre-written wa.me message - nothing is sent automatically), and can
+      post the same job to the residential WhatsApp group (wa.me with no
+      number: WhatsApp asks which chat; added 10/11/2026);
     - the report marks it Serviced and emails Larry, Wayne and Veronica to
       invoice; "Awaiting invoice" here records the Sage invoice number.
   The day list shows each job already on the technician's planner with its
@@ -250,9 +252,24 @@ function book(){
       (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
       "\nIt is on your planner. On the report select customer: "+r.customer;
     var url="https://wa.me/"+waNumber(t[2])+"?text="+encodeURIComponent(text);
+    // Residential WhatsApp group (Wayne's, 10/11/2026): a web page cannot post to
+    // a group, so wa.me with NO number opens WhatsApp's chat picker with the text
+    // filled in - the booker picks the group and presses send.
+    var groupText="*New residential job - "+r.bookingNo+"*\n"+
+      "Assigned to: "+t[1]+"\n"+
+      "Date: "+wd(d.date)+" "+dmy(d.date)+" at "+d.time+"\n"+
+      "Customer: "+d.firstName+" "+d.surname+"\n"+
+      "Cell: "+d.phone+"\n"+
+      "Address: "+d.address+"\n"+
+      "Treatment: "+d.treatment+"\n"+
+      (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
+      "Booked by: "+d.bookedBy;
+    var groupUrl="https://wa.me/?text="+encodeURIComponent(groupText);
     m.innerHTML="<div class='msg ok'><b>Booked "+esc(r.bookingNo)+"</b> - on "+esc(t[1])+"'s planner for "+wd(d.date)+" "+dmy(d.date)+" at "+esc(d.time)+".</div>"+
       (/^FAILED/.test(r.bookingEmail||"")?"<div class='msg err'>The office email did not send: "+esc(r.bookingEmail)+"</div>":"")+
       "<a class='btn wa' href='"+url+"' target='_blank' rel='noopener'>Send to "+esc(t[1])+" on WhatsApp</a>"+
+      "<a class='btn wa' href='"+groupUrl+"' target='_blank' rel='noopener'>Post to residential group</a>"+
+      "<div class='hint'>Opens WhatsApp with the message filled in - pick the residential group and press send.</div>"+
       "<button class='btn sec' onclick='resetForm()'>New booking</button>";
     b.classList.add("hide");
     planner.push({date:d.date,techKey:key,techName:d.techName,customer:r.customer,notes:"Residential "+r.bookingNo+" | "+d.time,frequency:"Once-off"});
