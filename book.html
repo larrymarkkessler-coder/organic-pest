@@ -68,6 +68,10 @@ textarea{min-height:70px;resize:vertical}
 .bk .st{font-size:12px;padding:2px 8px;border-radius:10px;background:#e3ebe6;white-space:nowrap}
 .bk .st.Serviced{background:#fff1d6;color:#8a5a00}.bk .st.Invoiced{background:var(--lt);color:var(--g)}.bk .st.Cancelled{background:#eee;color:#777}
 .bk .ln{font-size:13px;color:var(--mut);margin-top:3px}
+.chk{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chk label{display:flex;align-items:center;gap:8px;margin:0;padding:10px;font-size:14px;font-weight:normal;color:var(--tx);border:1px solid #c9d6ce;border-radius:6px;background:#fff;cursor:pointer}
+.chk label:has(input:checked){border-color:var(--g);background:var(--lt);color:var(--g);font-weight:bold}
+.chk input{width:20px;height:20px;margin:0;padding:0;flex:none;accent-color:var(--g)}
 .hide{display:none}
 .empty{color:var(--mut);text-align:center;padding:20px}
 </style>
@@ -97,14 +101,23 @@ textarea{min-height:70px;resize:vertical}
   <div class="card">
     <h2>Job</h2>
     <label>Treatment <span class="req">*</span></label>
-    <select id="f-treat">
-      <option value="">-- Select treatment --</option>
-      <option>Rodent control</option><option>Cockroach treatment</option>
-      <option>Termite &amp; wood borer</option><option>Ants &amp; crawling insects</option>
-      <option>Bed bug eradication</option><option>Flies &amp; mosquitoes</option>
-      <option>Bee &amp; wasp removal</option><option>Fogging &amp; fumigation</option>
-      <option>General pest treatment</option><option>Inspection</option>
-    </select>
+    <!-- Tick boxes, not a dropdown (10/11/2026): one job can be several
+         treatments (e.g. rodent + ant + fly). Saved as one text field joined
+         with ", " - the register, planner notes, emails and SPDev show it as-is. -->
+    <div id="f-treat" class="chk">
+      <label><input type="checkbox" value="Rodent control">Rodent control</label>
+      <label><input type="checkbox" value="Cockroach treatment">Cockroach treatment</label>
+      <label><input type="checkbox" value="Termite &amp; wood borer">Termite &amp; wood borer</label>
+      <label><input type="checkbox" value="Ants &amp; crawling insects">Ants &amp; crawling insects</label>
+      <label><input type="checkbox" value="Bed bug eradication">Bed bug eradication</label>
+      <label><input type="checkbox" value="Flies &amp; mosquitoes">Flies &amp; mosquitoes</label>
+      <label><input type="checkbox" value="Bee &amp; wasp removal">Bee &amp; wasp removal</label>
+      <label><input type="checkbox" value="Fogging &amp; fumigation">Fogging &amp; fumigation</label>
+      <label><input type="checkbox" value="General pest treatment">General pest treatment</label>
+      <label><input type="checkbox" value="Inspection">Inspection</label>
+      <label><input type="checkbox" value="Delivery">Delivery</label>
+    </div>
+    <div class="hint">Tick every treatment for this job.</div>
     <div class="two">
       <div><label>Date <span class="req">*</span></label><input id="f-date" type="date"></div>
       <div><label>Time <span class="req">*</span></label><input id="f-time" type="time" step="900"></div>
@@ -222,6 +235,11 @@ function renderDay(){
 // ── booking ───────────────────────────────────────────────────────────
 function newRef(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 var clientRef=newRef();
+function treatments(){
+  var out=[],c=document.querySelectorAll("#f-treat input");
+  for(var i=0;i<c.length;i++)if(c[i].checked)out.push(c[i].value);
+  return out.join(", ");
+}
 function waNumber(n){n=String(n).replace(/\D/g,"");return n.charAt(0)==="0"?"27"+n.slice(1):n;}
 function book(){
   var by=g("f-by").value==="OTHER"?g("f-by2").value.trim():g("f-by").value;
@@ -229,7 +247,7 @@ function book(){
     action:"addResidentialBooking", clientRef:clientRef, bookedBy:by,
     firstName:g("f-first").value.trim(), surname:g("f-sur").value.trim(),
     phone:g("f-phone").value.trim(), address:g("f-addr").value.trim(),
-    invoiceTo:g("f-invto").value.trim(), treatment:g("f-treat").value,
+    invoiceTo:g("f-invto").value.trim(), treatment:treatments(),
     date:g("f-date").value, time:g("f-time").value, techKey:key,
     techName:key?techName(key):"", techNotes:g("f-notes").value.trim()};
   var miss=[];
@@ -280,7 +298,8 @@ function book(){
 }
 function resetForm(){
   ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time"].forEach(function(id){g(id).value="";});
-  g("f-treat").value="";g("f-tech").value="";g("m-book").innerHTML="";g("b-book").classList.remove("hide");
+  var tc=document.querySelectorAll("#f-treat input");for(var i=0;i<tc.length;i++)tc[i].checked=false;
+  g("f-tech").value="";g("m-book").innerHTML="";g("b-book").classList.remove("hide");
   clientRef=newRef();renderDay();window.scrollTo(0,0);
 }
 
