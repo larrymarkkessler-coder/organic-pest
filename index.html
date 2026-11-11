@@ -2928,13 +2928,14 @@ function saveRpt(d){
       fuDone[d.reportNo]=true;
       localStorage.setItem("org_fu_done",JSON.stringify(fuDone));
       try{
+        // Follow-ups are Once Off (Larry, 11/11/2026) - never rolled into next month
         var fuJob={date:d.followUpDate,techKey:d.techKey,techName:d.techName||"",
-          customer:d.customer,notes:"Follow-up: "+d.customer};
+          customer:d.customer,frequency:"Once Off",notes:"Follow-up: "+d.customer};
         if(typeof plannerJobs!=="undefined")plannerJobs.push(fuJob);
         var fuFd=new FormData();
         fuFd.append("payload",JSON.stringify({action:"savePlannerJob",
           date:fuJob.date,techKey:fuJob.techKey,techName:fuJob.techName,
-          customer:fuJob.customer,notes:fuJob.notes}));
+          customer:fuJob.customer,frequency:"Once Off",notes:fuJob.notes}));
         fetch(GAS_URL,{method:"POST",body:fuFd})
           .then(function(){console.log("Follow-up added: "+d.followUpDate);})
           .catch(function(e){console.log("Follow-up failed:",e.message);});
@@ -4258,8 +4259,8 @@ function findSamePositionNextMonth(dateStr){
 
 function rollForward(){
   var monthStr=calYear+"-"+String(calMonth+1).padStart(2,"0");
-  // Once-off residential bookings (RES-) never repeat into the next month
-  var currentJobs=plannerJobs.filter(function(j){return j.date.indexOf(monthStr)===0&&j.frequency!=="Once-off";});
+  // Once-off residential bookings (RES-, "Once-off") and follow-ups ("Once Off") never repeat into the next month
+  var currentJobs=plannerJobs.filter(function(j){return j.date.indexOf(monthStr)===0&&!/^once.?off$/i.test(String(j.frequency||"").trim());});
   if(!currentJobs.length){alert("No jobs in current month to roll forward.");return;}
   var nm=calMonth+1,ny=calYear;if(nm>11){nm=0;ny++;}
   var nextMonthStr=ny+"-"+String(nm+1).padStart(2,"0");
