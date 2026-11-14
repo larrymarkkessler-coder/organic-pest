@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#1a5c38">
-<title>Residential Booking</title>
+<title>Job Booking</title>
 <!--
   Residential Booking (06/11/2026). Anyone in the office books a short-notice
   residential job from a phone:
@@ -17,6 +17,10 @@
       number: WhatsApp asks which chat; added 10/11/2026);
     - the report marks it Serviced and emails Larry, Wayne and Veronica to
       invoice; "Awaiting invoice" here records the Sage invoice number.
+  New ongoing customer (14/11/2026): the same booking with type "ongoing" -
+  the first visit goes on the planner as "<Planner name> (RES-0001)" exactly
+  like a residential job, and the register keeps the legal name, zone,
+  frequency and report recipient for the change form.
   The day list shows each job already on the technician's planner with its
   estimated time (job_times.json, last month's report PDFs) against 8 hours.
   ?invoice=RES-0001 opens that booking's invoice form (link in the email).
@@ -73,11 +77,15 @@ textarea{min-height:70px;resize:vertical}
 .chk label:has(input:checked){border-color:var(--g);background:var(--lt);color:var(--g);font-weight:bold}
 .chk input{width:20px;height:20px;margin:0;padding:0;flex:none;accent-color:var(--g)}
 .hide{display:none}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg button{padding:12px;border:1px solid #c9d6ce;border-radius:6px;background:#fff;font-size:15px;color:var(--tx);cursor:pointer}
+.seg button.on{background:var(--g);border-color:var(--g);color:#fff;font-weight:bold}
+.bk .ty{font-size:11px;padding:1px 7px;border-radius:10px;background:#e8e3f5;color:#4a3a8a;margin-left:6px;font-weight:normal}
 .empty{color:var(--mut);text-align:center;padding:20px}
 </style>
 </head>
 <body>
-<header><h1>Residential Booking</h1><div>Organic Pest Prevention Services</div></header>
+<header><h1>Job Booking</h1><div>Organic Pest Prevention Services</div></header>
 <nav>
   <button id="t-new" class="on" onclick="tab('new')">New booking</button>
   <button id="t-inv" onclick="tab('inv')">Awaiting invoice<span id="c-inv" class="cnt hide">0</span></button>
@@ -87,10 +95,28 @@ textarea{min-height:70px;resize:vertical}
 
 <section id="p-new">
   <div class="card">
+    <div class="seg">
+      <button id="k-res" class="on" type="button" onclick="setKind('res')">New residential</button>
+      <button id="k-ong" type="button" onclick="setKind('ongoing')">New ongoing customer</button>
+    </div>
+    <div id="k-hint" class="hint hide">A new contract customer. The first visit is booked now; the customer is then set up for its regular visits through the change form.</div>
+  </div>
+  <div class="card">
     <h2>Customer</h2>
-    <div class="two">
+    <div id="res-only" class="two">
       <div><label>Name <span class="req">*</span></label><input id="f-first" autocomplete="off"></div>
       <div><label>Surname <span class="req">*</span></label><input id="f-sur" autocomplete="off"></div>
+    </div>
+    <div id="ong-only" class="hide">
+      <label>Customer legal name <span class="req">*</span></label><input id="f-legal" autocomplete="off" placeholder="As it must appear on the Sage invoice">
+      <label>Planner / site name <span class="req">*</span></label><input id="f-planner" autocomplete="off" placeholder="The short name the technician will see">
+      <label>Contact person</label><input id="f-contact" autocomplete="off">
+      <div class="two">
+        <div><label>Zone</label><select id="f-zone"><option value="">-- Select zone --</option><option>Zone 1 - Sandton Core</option><option>Zone 2 - Bryanston / Fourways</option><option>Zone 3 - Randburg / Ferndale</option><option>Zone 4 - Rosebank / Morningside</option><option>Zone 5 - JHB CBD / Hillbrow</option><option>Zone 6 - East Rand</option><option>Zone 7 - Midrand / Linksfield</option><option>Zone 8 - West Rand</option><option>Zone 9 - Centurion / Pretoria / South</option></select></div>
+        <div><label>Service frequency</label><select id="f-freq"><option>Monthly</option><option>Weekly</option><option>Every 2 months</option><option>Quarterly</option></select></div>
+      </div>
+      <label>Service report to (name)</label><input id="f-rname" autocomplete="off">
+      <label>Service report email(s)</label><input id="f-remail" type="email" multiple autocomplete="off" placeholder="Separate several with a comma">
     </div>
     <label>Cell number <span class="req">*</span></label><input id="f-phone" type="tel" placeholder="e.g. 082 123 4567">
     <label>Address <span class="req">*</span></label><textarea id="f-addr" placeholder="Street, suburb (estate / unit number)"></textarea>
@@ -100,7 +126,7 @@ textarea{min-height:70px;resize:vertical}
 
   <div class="card">
     <h2>Job</h2>
-    <label>Treatment <span class="req">*</span></label>
+    <label>Treatment <span class="req" id="treat-req">*</span></label>
     <!-- Tick boxes, not a dropdown (10/11/2026): one job can be several
          treatments (e.g. rodent + ant + fly). Saved as one text field joined
          with ", " - the register, planner notes, emails and SPDev show it as-is. -->
@@ -233,6 +259,14 @@ function renderDay(){
 }
 
 // ── booking ───────────────────────────────────────────────────────────
+var kind="res";
+function setKind(k){
+  kind=k==="ongoing"?"ongoing":"res";
+  g("k-res").classList.toggle("on",kind==="res");g("k-ong").classList.toggle("on",kind==="ongoing");
+  g("res-only").classList.toggle("hide",kind!=="res");g("ong-only").classList.toggle("hide",kind!=="ongoing");
+  g("k-hint").classList.toggle("hide",kind!=="ongoing");g("treat-req").classList.toggle("hide",kind==="ongoing");
+  g("m-book").innerHTML="";
+}
 function newRef(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 var clientRef=newRef();
 function treatments(){
@@ -246,40 +280,51 @@ function book(){
   var key=g("f-tech").value, d={
     action:"addResidentialBooking", clientRef:clientRef, bookedBy:by,
     firstName:g("f-first").value.trim(), surname:g("f-sur").value.trim(),
+    plannerName:g("f-planner").value.trim(), legalName:g("f-legal").value.trim(),
     phone:g("f-phone").value.trim(), address:g("f-addr").value.trim(),
     invoiceTo:g("f-invto").value.trim(), treatment:treatments(),
     date:g("f-date").value, time:g("f-time").value, techKey:key,
     techName:key?techName(key):"", techNotes:g("f-notes").value.trim()};
-  var miss=[];
-  [["firstName","Name"],["surname","Surname"],["phone","Cell number"],["address","Address"],["treatment","Treatment"],
-   ["date","Date"],["time","Time"],["techKey","Technician"],["bookedBy","Booked by"]].forEach(function(f){if(!d[f[0]])miss.push(f[1]);});
-  var m=g("m-book");
+  var ong=kind==="ongoing",miss=[],m=g("m-book");
+  if(ong){
+    d.type="ongoing";d.firstName=g("f-contact").value.trim();d.surname="";
+    d.zone=g("f-zone").value;d.frequency=g("f-freq").value;
+    d.reportContact=g("f-rname").value.trim();d.reportEmail=g("f-remail").value.trim();
+    if(d.firstName)d.techNotes=("Contact: "+d.firstName+(d.techNotes?" | "+d.techNotes:""));
+    if(d.reportEmail&&!d.reportEmail.split(/[;,]/).every(function(x){return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.trim());})){
+      m.innerHTML="<div class='msg err'>Check the service report email address(es).</div>";return;}
+  }else{delete d.plannerName;delete d.legalName;}
+  (ong?[["legalName","Customer legal name"],["plannerName","Planner / site name"],["phone","Cell number"],["address","Address"]]
+      :[["firstName","Name"],["surname","Surname"],["phone","Cell number"],["address","Address"],["treatment","Treatment"]])
+   .concat([["date","Date"],["time","Time"],["techKey","Technician"],["bookedBy","Booked by"]]).forEach(function(f){if(!d[f[0]])miss.push(f[1]);});
   if(miss.length){m.innerHTML="<div class='msg err'>Please fill in: "+miss.join(", ")+"</div>";return;}
+  var who=ong?d.plannerName:(d.firstName+" "+d.surname), what=d.treatment||"First visit";
+  var title=ong?"New customer, first visit":"New residential job";
   if(!plannerOk){m.innerHTML="<div class='msg err'>The planner has not loaded yet - wait a moment and try again.</div>";return;}
   lsSet("bookedBy",g("f-by").value);if(g("f-by").value==="OTHER")lsSet("bookedBy2",by);
   var b=g("b-book");b.disabled=true;b.textContent="Booking...";m.innerHTML="";
   post(d).then(function(r){
     if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
     var t=TECHS.filter(function(x){return x[0]===key;})[0];
-    var text="*New residential job - "+r.bookingNo+"*\n"+
+    var text="*"+title+" - "+r.bookingNo+"*\n"+
       "Date: "+wd(d.date)+" "+dmy(d.date)+" at "+d.time+"\n"+
-      "Customer: "+d.firstName+" "+d.surname+"\n"+
+      "Customer: "+who+"\n"+
       "Cell: "+d.phone+"\n"+
       "Address: "+d.address+"\n"+
-      "Treatment: "+d.treatment+"\n"+
+      "Treatment: "+what+"\n"+
       (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
       "\nIt is on your planner. On the report select customer: "+r.customer;
     var url="https://wa.me/"+waNumber(t[2])+"?text="+encodeURIComponent(text);
     // Residential WhatsApp group (Wayne's, 10/11/2026): a web page cannot post to
     // a group, so wa.me with NO number opens WhatsApp's chat picker with the text
     // filled in - the booker picks the group and presses send.
-    var groupText="*New residential job - "+r.bookingNo+"*\n"+
+    var groupText="*"+title+" - "+r.bookingNo+"*\n"+
       "Assigned to: "+t[1]+"\n"+
       "Date: "+wd(d.date)+" "+dmy(d.date)+" at "+d.time+"\n"+
-      "Customer: "+d.firstName+" "+d.surname+"\n"+
+      "Customer: "+who+"\n"+
       "Cell: "+d.phone+"\n"+
       "Address: "+d.address+"\n"+
-      "Treatment: "+d.treatment+"\n"+
+      "Treatment: "+what+"\n"+
       (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
       "Booked by: "+d.bookedBy;
     var groupUrl="https://wa.me/?text="+encodeURIComponent(groupText);
@@ -297,7 +342,8 @@ function book(){
   }).then(function(){b.disabled=false;b.textContent="Book job";});
 }
 function resetForm(){
-  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time"].forEach(function(id){g(id).value="";});
+  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time","f-legal","f-planner","f-contact","f-zone","f-rname","f-remail"].forEach(function(id){g(id).value="";});
+  g("f-freq").value="Monthly";
   var tc=document.querySelectorAll("#f-treat input");for(var i=0;i<tc.length;i++)tc[i].checked=false;
   g("f-tech").value="";g("m-book").innerHTML="";g("b-book").classList.remove("hide");
   clientRef=newRef();renderDay();window.scrollTo(0,0);
@@ -306,10 +352,11 @@ function resetForm(){
 // ── lists ─────────────────────────────────────────────────────────────
 function card(b,withInvoice){
   var no=b["Booking No"],hl=Q.get("invoice")===no?" hl":"";
-  var h="<div class='card bk"+hl+"' id='bk-"+esc(no)+"'><div class='top'><span>"+esc(b["First Name"]+" "+b["Surname"])+"</span><span class='st "+esc(b["Status"])+"'>"+esc(b["Status"])+"</span></div>"+
+  var h="<div class='card bk"+hl+"' id='bk-"+esc(no)+"'><div class='top'><span>"+esc((b["First Name"]+" "+b["Surname"]).trim())+(b["Type"]==="Ongoing"?"<span class='ty'>New ongoing customer</span>":"")+"</span><span class='st "+esc(b["Status"])+"'>"+esc(b["Status"])+"</span></div>"+
     "<div class='ln'>"+esc(no)+" &middot; "+wd(b["Date"])+" "+dmy(b["Date"])+" "+esc(b["Time"])+" &middot; "+esc(b["Tech Name"])+"</div>"+
     "<div class='ln'>"+esc(b["Treatment"])+" &middot; "+esc(b["Address"])+"</div>"+
     "<div class='ln'>Invoice to: <b>"+esc(b["Invoice To"])+"</b> &middot; "+esc(b["Phone"])+"</div>"+
+    (b["Type"]==="Ongoing"?"<div class='ln'>"+esc(b["Frequency"])+(b["Zone"]?" &middot; "+esc(b["Zone"]):"")+((b["Report Contact"]||b["Report Email"])?" &middot; Report to: "+esc((b["Report Contact"]+" "+b["Report Email"]).trim()):"")+"</div>":"")+
     (b["Report No"]?"<div class='ln'>Report "+esc(b["Report No"])+" ("+dmy(b["Serviced Date"])+")</div>":"")+
     (b["Booking Email"]?"<div class='ln'"+(/^FAILED/.test(b["Booking Email"])?" style='color:#c0392b;font-weight:bold'":"")+">Booking email: "+esc(b["Booking Email"])+"</div>":"")+
     (b["Invoice Email"]?"<div class='ln'"+(/^FAILED/.test(b["Invoice Email"])?" style='color:#c0392b;font-weight:bold'":"")+">Invoice email: "+esc(b["Invoice Email"])+"</div>":"")+
