@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1a5c38">
+<title>Quote Request</title>
+<!--
+  Quote Request (Larry, 18/11/2026). A technician in the field raises a quotation
+  request from the phone, without writing a service report:
+    - signs in with the same technician code as the platform (TD in index.html);
+    - picks the customer from the platform's customer list (CD) or types a new one;
+    - adds one or more items: category -> item (the platform's own dropdown lists:
+      MATS, EQUIP_MATS and QUOTE_MATS, merged), quantity and the location on site
+      ("Blending area", "Despatch exit"); "Other" takes a typed description;
+    - customer contact and email, notes to the office.
+  Submitting posts the platform's existing "emailQuoteRequest" action, exactly as
+  section 7 of the service report does: the request is emailed to the office and
+  saved on the Quote Requests tab (SPDev "Quotation Requests Outstanding" reads it
+  within the hour). Nothing new in Apps Script.
+  The reference (QR-...) is fixed per form, so pressing Submit again after a
+  dropped signal never adds a second row to the Quote Requests tab.
+  WhatsApp: a web page cannot post to a group, so wa.me with no number opens
+  WhatsApp's chat picker with the request filled in - the technician picks the
+  Organic Pest Prevention group and presses send (same as book.html).
+  The lists are read from index.html when the page opens, so a change made to the
+  platform's items or customers appears here with no change to this page.
+  ?test=1 allows the LARRY test code.
+-->
+<style>
+:root{--g:#1a5c38;--g2:#2d7a50;--lt:#f0f9f4;--bd:#d6e4dc;--tx:#1d2a22;--mut:#5f6f66;--red:#c0392b;--bg:#f4f6f5;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--tx);font-size:15px}
+header{background:var(--g);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+header h1{margin:0;font-size:18px}
+header div.s{font-size:12px;color:#a8d5b5;margin-top:2px}
+header button{background:none;border:1px solid #a8d5b5;color:#fff;border-radius:6px;padding:6px 10px;font-size:12px}
+main{padding:12px 16px 40px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:14px;margin-bottom:12px}
+.card h2{font-size:13px;text-transform:uppercase;color:var(--g);margin:0 0 10px}
+label{display:block;font-size:12px;font-weight:bold;color:var(--mut);margin:10px 0 4px}
+label .req{color:var(--red)}
+input,select,textarea{width:100%;padding:11px 10px;font-size:16px;border:1px solid #c9d6ce;border-radius:6px;background:#fff;color:var(--tx);font-family:inherit}
+textarea{min-height:70px;resize:vertical}
+.two{display:flex;gap:10px}.two>div{flex:1;min-width:0}
+.two>div.q{flex:0 0 96px}
+.hint{font-size:12px;color:var(--mut);margin-top:4px}
+.btn{display:block;width:100%;padding:14px;font-size:16px;font-weight:bold;border:0;border-radius:8px;background:var(--g);color:#fff;margin-top:14px;text-align:center;text-decoration:none;cursor:pointer}
+.btn:disabled{opacity:.5}
+.btn.wa{background:#25d366}
+.btn.sec{background:#fff;color:var(--g);border:1px solid var(--g)}
+.item{border:1px solid var(--bd);border-left:4px solid var(--g2);border-radius:6px;padding:4px 10px 10px;margin-bottom:10px;position:relative}
+.item .no{font-size:12px;font-weight:bold;color:var(--g);margin-top:8px}
+.item .del{position:absolute;top:6px;right:6px;border:0;background:none;color:var(--red);font-size:13px;font-weight:bold;padding:6px;cursor:pointer}
+.msg{padding:10px 12px;border-radius:6px;margin-top:10px;font-size:14px}
+.msg.err{background:#fdecea;color:var(--red)}
+.msg.ok{background:var(--lt);color:var(--g)}
+.hide{display:none}
+.addr{font-size:13px;color:var(--mut);margin-top:6px}
+</style>
+</head>
+<body>
+<header><div><h1>Quote Request</h1><div class="s">Organic Pest Prevention Services</div></div><button id="b-out" class="hide" onclick="signOut()">Sign out</button></header>
+<main>
+
+<section id="p-login">
+  <div class="card">
+    <h2>Sign in</h2>
+    <label>Technician code <span class="req">*</span></label>
+    <input id="f-code" autocomplete="off" autocapitalize="characters" placeholder="The code you use on the platform, e.g. P12345">
+    <button id="b-in" class="btn" onclick="signIn()" disabled>Loading...</button>
+    <div id="m-in"></div>
+  </div>
+</section>
+
+<section id="p-form" class="hide">
+  <div class="card">
+    <h2>Customer</h2>
+    <label>Customer <span class="req">*</span></label>
+    <input id="f-cust" list="l-cust" autocomplete="off" placeholder="Start typing the customer name">
+    <datalist id="l-cust"></datalist>
+    <div id="f-addr-known" class="addr"></div>
+    <div id="new-cust" class="hide">
+      <div class="hint">Not on the customer list - it will go to the office as a new customer.</div>
+      <label>Address <span class="req">*</span></label><textarea id="f-addr" placeholder="Street, suburb"></textarea>
+    </div>
+    <div class="two">
+      <div><label>Customer contact <span class="req">*</span></label><input id="f-attn" autocomplete="off" placeholder="Name of the person"></div>
+      <div><label>Contact number</label><input id="f-tel" type="tel" autocomplete="off" placeholder="e.g. 082 123 4567"></div>
+    </div>
+    <label>Customer email <span class="req">*</span></label><input id="f-email" type="email" autocomplete="off" placeholder="name@company.co.za">
+  </div>
+
+  <div class="card">
+    <h2>Items to quote</h2>
+    <div id="items"></div>
+    <button class="btn sec" type="button" onclick="addItem()">+ Add another item</button>
+  </div>
+
+  <div class="card">
+    <label>Notes to the office</label>
+    <textarea id="f-notes" placeholder="Anything the office should know for the quote (access, urgency, what the customer asked for)"></textarea>
+    <button id="b-send" class="btn" onclick="send()">Send quote request</button>
+    <div id="m-send"></div>
+  </div>
+</section>
+</main>
+
+<script>
+var GAS_URL="https://script.google.com/macros/s/AKfycbwZMNTB8DpvQnqQvodKC0KFLXnVm-2QdhD0DtiF4ow5aR6JgM_fR-UtmpePsCo4lBce/exec";
+var Q=new URLSearchParams(location.search);
+var TD={}, CUST=[], CATS=[], MATS={}, OTHER="Other (describe the item)";
+var tech=null, ref="";
+function g(id){return document.getElementById(id);}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function lsGet(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+function todayISO(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function dmy(iso){var p=String(iso||"").split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:iso;}
+function newRef(){var d=new Date(),p=function(n){return String(n).padStart(2,"0");};
+  return "QR-"+String(d.getFullYear()).slice(2)+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+"-"+Math.random().toString(36).slice(2,5).toUpperCase();}
+
+// ── the platform's own lists (read from index.html, same site) ─────────
+function readVar(src,name){
+  var m=new RegExp("^var "+name+"=(.*?);\\s*$","m").exec(src);
+  if(!m)return null;try{return JSON.parse(m[1]);}catch(e){return null;}
+}
+function loadLists(){
+  return fetch("index.html?t="+Date.now()).then(function(r){return r.text();}).then(function(src){
+    TD=readVar(src,"TD")||{};
+    CUST=(readVar(src,"CD")||[]).map(function(c){return {name:c[0],address:c[1]||""};});
+    // categories and items: the service report's materials (section 4), equipment (section 5)
+    // and quotation (section 7) dropdowns, merged so any item in the business can be chosen
+    var lists=[[readVar(src,"CATS"),readVar(src,"MATS")],[readVar(src,"EQUIP_CATS"),readVar(src,"EQUIP_MATS")],[readVar(src,"QUOTE_CATS"),readVar(src,"QUOTE_MATS")]];
+    MATS={};CATS=[];
+    lists.forEach(function(l){var cs=l[0]||[],ms=l[1]||{};
+      cs.concat(Object.keys(ms)).forEach(function(c){
+        if(!MATS[c]){MATS[c]=[];CATS.push(c);}
+        (ms[c]||[]).forEach(function(it){if(MATS[c].indexOf(it)<0)MATS[c].push(it);});
+      });
+    });
+    CATS.sort(function(a,b){return (a==="Seldom Used")-(b==="Seldom Used")||a.localeCompare(b);});
+    CATS.forEach(function(c){MATS[c].sort(function(a,b){return a.localeCompare(b);});});
+    if(!CATS.length||!Object.keys(TD).length)throw new Error("lists missing");
+    var dl=g("l-cust");CUST.forEach(function(c){var o=document.createElement("option");o.value=c.name;dl.appendChild(o);});
+  });
+}
+
+// ── sign in with the platform technician code ──────────────────────────
+function signIn(){
+  var code=g("f-code").value.trim().toUpperCase(),name=TD[code];
+  if(name&&/larry/i.test(name)&&Q.get("test")!=="1")name=null;     // LARRY is the test account
+  if(!name){g("m-in").innerHTML="<div class='msg err'>That code is not recognised. Use the code you sign in to the platform with.</div>";return;}
+  tech={code:code,name:name};lsSet("qrTech",code);showForm();
+}
+function signOut(){lsDel("qrTech");tech=null;g("p-form").classList.add("hide");g("p-login").classList.remove("hide");g("b-out").classList.add("hide");g("f-code").value="";}
+function showForm(){
+  g("p-login").classList.add("hide");g("p-form").classList.remove("hide");g("b-out").classList.remove("hide");
+  g("b-out").textContent=tech.name.split(" ")[0]+" · Sign out";
+  if(!g("items").children.length)addItem();
+  ref=ref||newRef();
+}
+
+// ── customer ───────────────────────────────────────────────────────────
+function custMatch(){var v=g("f-cust").value.trim().toLowerCase();for(var i=0;i<CUST.length;i++)if(CUST[i].name.toLowerCase()===v)return CUST[i];return null;}
+function custChanged(){
+  var v=g("f-cust").value.trim(),c=custMatch();
+  g("f-addr-known").textContent=c&&c.address?c.address:"";
+  g("new-cust").classList.toggle("hide",!v||!!c);
+}
+
+// ── items ──────────────────────────────────────────────────────────────
+function addItem(){
+  var box=g("items"),n=box.children.length,prev=n?box.children[n-1]:null;
+  var d=document.createElement("div");d.className="item";
+  d.innerHTML="<div class='no'></div><button type='button' class='del' onclick='delItem(this)'>Remove</button>"+
+    "<label>Pest control category <span class='req'>*</span></label><select class='i-cat'><option value=''>-- Select category --</option>"+
+      CATS.map(function(c){return "<option>"+esc(c)+"</option>";}).join("")+"<option>"+esc(OTHER)+"</option></select>"+
+    "<label>Item <span class='req'>*</span></label><select class='i-item' disabled><option value=''>-- Select the category first --</option></select>"+
+    "<input class='i-other hide' placeholder='Describe the item' style='margin-top:8px'>"+
+    "<div class='two'><div class='q'><label>Quantity <span class='req'>*</span></label><input class='i-qty' type='number' min='1' step='1' inputmode='numeric'></div>"+
+    "<div><label>Location on site <span class='req'>*</span></label><input class='i-loc' autocomplete='off' placeholder='e.g. Blending area, despatch exit'></div></div>";
+  box.appendChild(d);
+  var cat=d.querySelector(".i-cat"),it=d.querySelector(".i-item"),oth=d.querySelector(".i-other");
+  cat.addEventListener("change",function(){
+    var c=cat.value,other=c===OTHER;
+    it.innerHTML="<option value=''>"+(c?"-- Select item --":"-- Select the category first --")+"</option>"+(MATS[c]||[]).map(function(m){return "<option>"+esc(m)+"</option>";}).join("");
+    it.disabled=!c||other;it.classList.toggle("hide",other);oth.classList.toggle("hide",!other);
+  });
+  if(prev)d.querySelector(".i-loc").value=prev.querySelector(".i-loc").value;   // usually the same area
+  number();
+}
+function delItem(b){var d=b.closest(".item");d.parentNode.removeChild(d);if(!g("items").children.length)addItem();number();}
+function number(){var it=g("items").children;for(var i=0;i<it.length;i++){it[i].querySelector(".no").textContent="Item "+(i+1);it[i].querySelector(".del").classList.toggle("hide",it.length===1);}}
+function items(){
+  var out=[],bad=0,it=g("items").children;
+  for(var i=0;i<it.length;i++){
+    var c=it[i].querySelector(".i-cat").value,other=c===OTHER;
+    var name=other?it[i].querySelector(".i-other").value.trim():it[i].querySelector(".i-item").value;
+    var q=it[i].querySelector(".i-qty").value,loc=it[i].querySelector(".i-loc").value.trim();
+    if(!c||!name||!(+q>0)||!loc){bad++;continue;}
+    out.push({area:loc,category:other?"Other":c,item:name,qty:String(+q)});
+  }
+  return {list:out,bad:bad};
+}
+
+// ── send ───────────────────────────────────────────────────────────────
+function send(){
+  var m=g("m-send"),miss=[],c=custMatch(),cust=g("f-cust").value.trim();
+  var addr=c?c.address:g("f-addr").value.trim(),attn=g("f-attn").value.trim(),tel=g("f-tel").value.trim(),email=g("f-email").value.trim();
+  var it=items();
+  if(!cust)miss.push("Customer");if(cust&&!addr)miss.push("Address");if(!attn)miss.push("Customer contact");if(!email)miss.push("Customer email");
+  if(miss.length){m.innerHTML="<div class='msg err'>Please fill in: "+miss.join(", ")+"</div>";return;}
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){m.innerHTML="<div class='msg err'>Check the customer email address.</div>";return;}
+  if(it.bad||!it.list.length){m.innerHTML="<div class='msg err'>Complete every item: category, item, quantity and location (or remove the item).</div>";return;}
+  var notes=[c?"":"NEW CUSTOMER (not on the platform list)",tel?"Contact number: "+tel:"",g("f-notes").value.trim(),"Raised on the Quote Request page"].filter(Boolean).join(" | ");
+  var d={action:"emailQuoteRequest",customer:cust,address:addr,date:todayISO(),techName:tech.name,reportNo:ref,
+         quoteAttn:attn,quoteEmail:email,quoteNotes:notes,quoteItems:it.list};
+  var b=g("b-send");b.disabled=true;b.textContent="Sending...";m.innerHTML="";
+  var fd=new FormData();fd.append("payload",JSON.stringify(d));
+  fetch(GAS_URL,{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(r){
+    if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
+    var text="*Quote request - "+cust+"*\n"+
+      (addr?"Address: "+addr+"\n":"")+
+      "Contact: "+attn+(tel?" ("+tel+")":"")+"\n"+
+      "Email: "+email+"\n"+
+      it.list.map(function(x,i){return (i+1)+". "+x.item+" x "+x.qty+" - "+x.area+(x.category!=="Other"?" ("+x.category+")":"");}).join("\n")+"\n"+
+      (g("f-notes").value.trim()?"Notes: "+g("f-notes").value.trim()+"\n":"")+
+      "Raised by "+tech.name+", "+dmy(d.date)+" ("+ref+")";
+    m.innerHTML="<div class='msg ok'><b>Sent to the office</b> - "+esc(ref)+". It is emailed and on the Quote Requests list.</div>"+
+      "<a class='btn wa' href='https://wa.me/?text="+encodeURIComponent(text)+"' target='_blank' rel='noopener'>Post to the WhatsApp group</a>"+
+      "<div class='hint'>Opens WhatsApp with the request filled in - pick the Organic Pest Prevention group and press send.</div>"+
+      "<button class='btn sec' onclick='resetForm()'>New quote request</button>";
+    b.classList.add("hide");
+  }).catch(function(e){
+    m.innerHTML="<div class='msg err'>Not sent: "+esc(e.message)+". Check your signal and press Send again - it will not be added twice.</div>";
+  }).then(function(){b.disabled=false;b.textContent="Send quote request";});
+}
+function resetForm(){
+  ["f-cust","f-addr","f-attn","f-tel","f-email","f-notes"].forEach(function(id){g(id).value="";});
+  g("items").innerHTML="";addItem();custChanged();
+  g("m-send").innerHTML="";g("b-send").classList.remove("hide");ref=newRef();window.scrollTo(0,0);
+}
+
+// ── start ──────────────────────────────────────────────────────────────
+(function(){
+  g("f-cust").addEventListener("input",custChanged);g("f-cust").addEventListener("change",custChanged);
+  g("f-code").addEventListener("keydown",function(e){if(e.key==="Enter")signIn();});
+  g("p-form").addEventListener("input",function(){if(!g("b-send").classList.contains("hide"))g("m-send").innerHTML="";});   // an old "please fill in" goes as they type
+  loadLists().then(function(){
+    var b=g("b-in");b.disabled=false;b.textContent="Sign in";
+    var saved=lsGet("qrTech");if(saved&&TD[saved]&&(!/larry/i.test(TD[saved])||Q.get("test")==="1")){tech={code:saved,name:TD[saved]};showForm();}
+  }).catch(function(){
+    g("b-in").textContent="Could not load";g("m-in").innerHTML="<div class='msg err'>The customer and item lists did not load - check your signal and reopen the page.</div>";
+  });
+})();
+</script>
+</body>
+</html>
