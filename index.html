@@ -3436,6 +3436,12 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
       trapRows.push([d3.device||"",d3.activity_traps.join(", ")]);
   });
   if(trapRows.length)tbl(["Device","Activity Trap No."],[0.34,0.66],trapRows,1);
+  // Larry, 18/11/2026: the Device column above is cut short ("Insect Light Traps - Vip"), so every light trap's
+  // full model is listed here for the customer. A separate table on purpose: the Device column stays exactly as it
+  // is, because the bait station check and the Site Report read it. "<n> on site" is not a bare number, so these
+  // lines are never read as trap numbers.
+  var iltFull=[];(data.devices||[]).forEach(function(d4){var q4=parseFloat(d4.qty_on_site||0);if(/^Insect Light Traps/.test(d4.device||"")&&q4>0)iltFull.push([d4.device,q4+" on site"]);});
+  if(iltFull.length)tbl(["Insect light trap (full model)","Number"],[0.75,0.25],iltFull,1);
   // Section 5: Equipment Installed
   var eqRows=[];(data.equipment||[]).forEach(function(eq){
     if(eq.item) eqRows.push([eq.category||"",eq.item,eq.qty||"",eq.method||""]);
