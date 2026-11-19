@@ -9,7 +9,7 @@
   Quote Request (Larry, 18/11/2026). A technician in the field raises a quotation
   request from the phone, without writing a service report:
     - no sign-in (Larry, 19/11/2026): picks their name from the platform's technician
-      list (TD in index.html); the phone remembers it;
+      list (TD in index.html) plus Larry Kessler and Veronica (OFFICE); the phone remembers it;
     - picks the customer from the platform's customer list (CD) or types a new one;
     - adds one or more items: category -> item (the platform's own dropdown lists:
       MATS, EQUIP_MATS and QUOTE_MATS, merged), quantity and the location on site
@@ -107,6 +107,7 @@ var GAS_URL="https://script.google.com/macros/s/AKfycbwZMNTB8DpvQnqQvodKC0KFLXnV
 var Q=new URLSearchParams(location.search);
 var TD={}, CUST=[], CATS=[], MATS={}, OTHER="Other (describe the item)";
 var ref="";
+var OFFICE=["Larry Kessler","Veronica"];   // Larry, 19/11/2026: Veronica and Larry can raise quotes here as well
 function g(id){return document.getElementById(id);}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function lsGet(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}
@@ -149,6 +150,7 @@ function fillTechs(){
   Object.keys(TD).forEach(function(k){var n=TD[k];
     if(/larry/i.test(n)&&Q.get("test")!=="1")return;              // LARRY is the test account
     if(names.indexOf(n)<0)names.push(n);});
+  OFFICE.forEach(function(n){if(names.indexOf(n)<0)names.push(n);});   // office staff who raise quotes too
   names.sort().forEach(function(n){var o=document.createElement("option");o.value=n;o.textContent=n;sel.appendChild(o);});
   var saved=lsGet("qrTechName");if(saved&&names.indexOf(saved)>=0)sel.value=saved;
   sel.addEventListener("change",function(){lsSet("qrTechName",sel.value);});
