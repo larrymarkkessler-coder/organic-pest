@@ -8,7 +8,8 @@
 <!--
   Quote Request (Larry, 18/11/2026). A technician in the field raises a quotation
   request from the phone, without writing a service report:
-    - signs in with the same technician code as the platform (TD in index.html);
+    - no sign-in (Larry, 19/11/2026): picks their name from the platform's technician
+      list (TD in index.html); the phone remembers it;
     - picks the customer from the platform's customer list (CD) or types a new one;
     - adds one or more items: category -> item (the platform's own dropdown lists:
       MATS, EQUIP_MATS and QUOTE_MATS, merged), quantity and the location on site
@@ -60,20 +61,15 @@ textarea{min-height:70px;resize:vertical}
 </style>
 </head>
 <body>
-<header><div><h1>Quote Request</h1><div class="s">Organic Pest Prevention Services</div></div><button id="b-out" class="hide" onclick="signOut()">Sign out</button></header>
+<header><div><h1>Quote Request</h1><div class="s">Organic Pest Prevention Services</div></div></header>
 <main>
 
-<section id="p-login">
-  <div class="card">
-    <h2>Sign in</h2>
-    <label>Technician code <span class="req">*</span></label>
-    <input id="f-code" autocomplete="off" autocapitalize="characters" placeholder="The code you use on the platform, e.g. P12345">
-    <button id="b-in" class="btn" onclick="signIn()" disabled>Loading...</button>
-    <div id="m-in"></div>
-  </div>
-</section>
-
+<div id="m-load" class="msg ok">Loading the customer and item lists...</div>
 <section id="p-form" class="hide">
+  <div class="card">
+    <label>Your name <span class="req">*</span></label>
+    <select id="f-tech"><option value="">-- Select your name --</option></select>
+  </div>
   <div class="card">
     <h2>Customer</h2>
     <label>Customer <span class="req">*</span></label>
@@ -110,7 +106,7 @@ textarea{min-height:70px;resize:vertical}
 var GAS_URL="https://script.google.com/macros/s/AKfycbwZMNTB8DpvQnqQvodKC0KFLXnVm-2QdhD0DtiF4ow5aR6JgM_fR-UtmpePsCo4lBce/exec";
 var Q=new URLSearchParams(location.search);
 var TD={}, CUST=[], CATS=[], MATS={}, OTHER="Other (describe the item)";
-var tech=null, ref="";
+var ref="";
 function g(id){return document.getElementById(id);}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function lsGet(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}
@@ -147,19 +143,15 @@ function loadLists(){
   });
 }
 
-// ── sign in with the platform technician code ──────────────────────────
-function signIn(){
-  var code=g("f-code").value.trim().toUpperCase(),name=TD[code];
-  if(name&&/larry/i.test(name)&&Q.get("test")!=="1")name=null;     // LARRY is the test account
-  if(!name){g("m-in").innerHTML="<div class='msg err'>That code is not recognised. Use the code you sign in to the platform with.</div>";return;}
-  tech={code:code,name:name};lsSet("qrTech",code);showForm();
-}
-function signOut(){lsDel("qrTech");tech=null;g("p-form").classList.add("hide");g("p-login").classList.remove("hide");g("b-out").classList.add("hide");g("f-code").value="";}
-function showForm(){
-  g("p-login").classList.add("hide");g("p-form").classList.remove("hide");g("b-out").classList.remove("hide");
-  g("b-out").textContent=tech.name.split(" ")[0]+" · Sign out";
-  if(!g("items").children.length)addItem();
-  ref=ref||newRef();
+// ── who is raising it: a name from the platform's technician list (no sign-in) ──
+function fillTechs(){
+  var sel=g("f-tech"),names=[];
+  Object.keys(TD).forEach(function(k){var n=TD[k];
+    if(/larry/i.test(n)&&Q.get("test")!=="1")return;              // LARRY is the test account
+    if(names.indexOf(n)<0)names.push(n);});
+  names.sort().forEach(function(n){var o=document.createElement("option");o.value=n;o.textContent=n;sel.appendChild(o);});
+  var saved=lsGet("qrTechName");if(saved&&names.indexOf(saved)>=0)sel.value=saved;
+  sel.addEventListener("change",function(){lsSet("qrTechName",sel.value);});
 }
 
 // ── customer ───────────────────────────────────────────────────────────
@@ -209,13 +201,14 @@ function items(){
 function send(){
   var m=g("m-send"),miss=[],c=custMatch(),cust=g("f-cust").value.trim();
   var addr=c?c.address:g("f-addr").value.trim(),attn=g("f-attn").value.trim(),tel=g("f-tel").value.trim(),email=g("f-email").value.trim();
-  var it=items();
+  var it=items(),techName=g("f-tech").value;
+  if(!techName)miss.push("Your name");
   if(!cust)miss.push("Customer");if(cust&&!addr)miss.push("Address");if(!attn)miss.push("Customer contact");if(!email)miss.push("Customer email");
   if(miss.length){m.innerHTML="<div class='msg err'>Please fill in: "+miss.join(", ")+"</div>";return;}
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){m.innerHTML="<div class='msg err'>Check the customer email address.</div>";return;}
   if(it.bad||!it.list.length){m.innerHTML="<div class='msg err'>Complete every item: category, item, quantity and location (or remove the item).</div>";return;}
   var notes=[c?"":"NEW CUSTOMER (not on the platform list)",tel?"Contact number: "+tel:"",g("f-notes").value.trim(),"Raised on the Quote Request page"].filter(Boolean).join(" | ");
-  var d={action:"emailQuoteRequest",customer:cust,address:addr,date:todayISO(),techName:tech.name,reportNo:ref,
+  var d={action:"emailQuoteRequest",customer:cust,address:addr,date:todayISO(),techName:techName,reportNo:ref,
          quoteAttn:attn,quoteEmail:email,quoteNotes:notes,quoteItems:it.list};
   var b=g("b-send");b.disabled=true;b.textContent="Sending...";m.innerHTML="";
   var fd=new FormData();fd.append("payload",JSON.stringify(d));
@@ -227,7 +220,7 @@ function send(){
       "Email: "+email+"\n"+
       it.list.map(function(x,i){return (i+1)+". "+x.item+" x "+x.qty+" - "+x.area+(x.category!=="Other"?" ("+x.category+")":"");}).join("\n")+"\n"+
       (g("f-notes").value.trim()?"Notes: "+g("f-notes").value.trim()+"\n":"")+
-      "Raised by "+tech.name+", "+dmy(d.date)+" ("+ref+")";
+      "Raised by "+techName+", "+dmy(d.date)+" ("+ref+")";
     m.innerHTML="<div class='msg ok'><b>Sent to the office</b> - "+esc(ref)+". It is emailed and on the Quote Requests list.</div>"+
       "<a class='btn wa' href='https://wa.me/?text="+encodeURIComponent(text)+"' target='_blank' rel='noopener'>Post to the WhatsApp group</a>"+
       "<div class='hint'>Opens WhatsApp with the request filled in - pick the Organic Pest Prevention group and press send.</div>"+
@@ -246,13 +239,11 @@ function resetForm(){
 // ── start ──────────────────────────────────────────────────────────────
 (function(){
   g("f-cust").addEventListener("input",custChanged);g("f-cust").addEventListener("change",custChanged);
-  g("f-code").addEventListener("keydown",function(e){if(e.key==="Enter")signIn();});
   g("p-form").addEventListener("input",function(){if(!g("b-send").classList.contains("hide"))g("m-send").innerHTML="";});   // an old "please fill in" goes as they type
   loadLists().then(function(){
-    var b=g("b-in");b.disabled=false;b.textContent="Sign in";
-    var saved=lsGet("qrTech");if(saved&&TD[saved]&&(!/larry/i.test(TD[saved])||Q.get("test")==="1")){tech={code:saved,name:TD[saved]};showForm();}
+    fillTechs();g("m-load").classList.add("hide");g("p-form").classList.remove("hide");addItem();ref=newRef();
   }).catch(function(){
-    g("b-in").textContent="Could not load";g("m-in").innerHTML="<div class='msg err'>The customer and item lists did not load - check your signal and reopen the page.</div>";
+    g("m-load").className="msg err";g("m-load").textContent="The customer and item lists did not load - check your signal and reopen the page.";
   });
 })();
 </script>
