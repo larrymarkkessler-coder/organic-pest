@@ -197,6 +197,7 @@ container that is the amount left, not the number of containers.</div>
 <div id="panel-form" class="panel active">
 <details class="card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#1a5c38;cursor:pointer;list-style:none">Saved reports <span id="rbadge" style="font-weight:normal;color:#666;font-size:10px"></span> &nbsp;<button class="bsm am" onclick="retrySyncAll()" style="font-size:9px;padding:2px 6px;vertical-align:middle">&#8635; Sync to Sheets</button></summary><div style="padding:0 12px 12px" id="rlist"><p style="color:#666;font-size:12px;padding:8px 0">No saved reports yet.</p></div></details>
 <details class="card" id="pend-card" style="margin-bottom:8px"><summary style="padding:9px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#8a5a00;cursor:pointer;list-style:none">&#9998; Awaiting signature <span id="pbadge" style="font-weight:normal;color:#666;font-size:10px"></span></summary><div style="padding:0 12px 12px"><p style="font-size:10px;color:#666;margin:2px 0 8px">Completed reports parked on this device until the customer representative signs them. They are <b>not</b> sent to the office until signed and submitted.</p><div id="plist"></div></div></details>
+<div id="draft-banner" style="display:none;background:#e8f4ec;border:1px solid #2d7a50;border-radius:8px;padding:9px 11px;font-size:12px;color:#1a3d28;margin-bottom:10px"></div>
 <div class="card"><div class="chd">1. Job Details</div><div class="cbd">
 <div class="row r1"><div class="fld"><label>Planner Name <span style="color:#2d7a50;font-size:10px">(select to auto-fill customer)</span></label>
 <select id="plan-sel" onchange="onPlannerSelect(this)">
@@ -3124,6 +3125,7 @@ function parkRpt(){
     if(a[d.reportNo])throw new Error("Report "+d.reportNo+" is already awaiting signature");
     a[d.reportNo]=d;localStorage.setItem("org_pending",JSON.stringify(a));
     photoMarkUsed(photoIdsInForm(),d.reportNo);   // before newRpt clears section 6
+    draftClear();
     var parkedNo=d.reportNo;
     rfPending();
     newRpt();                          // fresh form + fresh report number
@@ -3343,6 +3345,7 @@ function doSubmit(){
   try{
     var d=collect();saveRpt(d);markPlannerDoneNew(d);updateReconFromRpt(d);
     photoMarkUsed(photoIdsInForm(),d.reportNo);
+    _draftOff=true;draftClear();       // saved: nothing more to keep until a new report
     btn.textContent="Saved - tap to start new report";btn.disabled=false;btn.onclick=newRpt;
     var st=g("svst");st.className="svst ok";
     st.innerHTML="Saved: "+d.reportNo+" <button class=\"pbtn\" onclick=\"dlPDF('"+d.reportNo+"')\">Download PDF</button>";
@@ -3354,6 +3357,7 @@ function doSubmit(){
 }
 
 function newRpt(){
+  draftClear();_draftOff=false;      // a fresh report: the draft starts again
   selC=null;sigD=null;drw=false;hMk=false;
   ["addr","pzone","pzone2","pcode","tin","tout","arpt","cash","fudt","ccnf","cust-email","cust-cell","new-cust-name","quote-attn","quote-email","quote-notes"].forEach(function(id){g(id).value="";});
     g("addr").readOnly=true;g("addr").style.background="#f0f9f4";g("pzone").readOnly=true;g("pzone").style.background="#f0f9f4";g("pcode").readOnly=true;g("pcode").style.background="#f0f9f4";g("new-cust-row").style.display="none";
@@ -4719,8 +4723,9 @@ function photoThumb(rec,thumbs){
   im.src=rec.data;im.className="obs-thumb";im.dataset.pid=rec.id||"";
   im.title="Tap to take off this report (it stays saved on the phone)";
   im.style.cssText="height:46px;border:1px solid #b9d6c2;border-radius:3px;cursor:pointer";
-  im.onclick=function(){if(im.parentNode)im.parentNode.removeChild(im);photoBannerRefresh();};
+  im.onclick=function(){if(im.parentNode)im.parentNode.removeChild(im);photoBannerRefresh();draftSchedule();};
   thumbs.appendChild(im);
+  draftSchedule();
 }
 function photoModal(id,title){
   var m=g(id);
@@ -4854,6 +4859,252 @@ function makePhotoBtn(){
   wrap.appendChild(btn);wrap.appendChild(pick);wrap.appendChild(inp);
   wrap.appendChild(thumbs);wrap.appendChild(warn);
   return wrap;
+}
+
+/* ── DRAFT AUTOSAVE (Larry, 20/11/2026) ──
+   An unfinished report was lost whenever the browser closed - Android closes a
+   background browser to free memory, a call or WhatsApp is enough. The whole
+   form is now saved on the phone as the technician works (a second after each
+   change, and at once when the page is hidden), and put back automatically
+   when the platform opens again, with the SAME report number.
+   Safety rules:
+   - a draft whose report number is already saved, sent or parked is thrown
+     away, never restored - so a submitted report cannot come back as a second
+     copy;
+   - after Submit nothing is saved until a new report is started;
+   - only the technician's own taps and typing save (the restore's own events
+     do not), so restoring can never overwrite the draft with a half-built form.
+   Photos are not held in the draft: it keeps their ids, and they come back
+   from the photo store. */
+var DRAFT_KEY="org_draft",_draftTimer=null,_draftOff=false,_draftRestoring=false,
+    _draftPendingCust=null;
+function draftForm(){return g("panel-form");}
+function draftVal(el){return el?(el.type==="checkbox"?el.checked:el.value):"";}
+var DRAFT_IDS=["new-cust-name","addr","pzone","pzone2","pcode","svcd","tin","tout",
+  "sdesc","sfreq","arpt","cash","fusel","fudt","tsel","preg","ccnf","cust-email",
+  "cust-cell","quote-attn","quote-email","quote-notes"];
+function draftSnapshot(){
+  var q=function(r,c){return draftVal(r.querySelector(c));};
+  var cs=g("cs"),opt=cs&&cs.selectedIndex>=0?cs.options[cs.selectedIndex]:null;
+  var d={v:1,savedAt:new Date().toISOString(),rNo:rNo,
+    csVal:cs?cs.value:"",csText:(opt&&cs.value)?opt.text.trim():"",
+    site:draftVal(g("site-sel")),plan:draftVal(g("plan-sel")),f:{},
+    devOn:g("devices-serviced-toggle")?g("devices-serviced-toggle").checked:true,
+    pills:[],dev:[],ilt:[],areas:[],equip:[],recs:[],quotes:[],sig:sigD||null};
+  if(_draftPendingCust){d.csVal=_draftPendingCust.csVal;d.csText=_draftPendingCust.csText;d.site=_draftPendingCust.site;}
+  DRAFT_IDS.forEach(function(id){if(g(id))d.f[id]=draftVal(g(id));});
+  document.querySelectorAll(".pill input").forEach(function(i){if(i.checked)d.pills.push(i.value);});
+  function devRow(r){return {dons:q(r,".dons"),dcar:q(r,".dcar"),dact:q(r,".dact"),dmat:q(r,".dmat"),
+    dqty:q(r,".dqty"),dunit:q(r,".dunit"),dmeth:q(r,".dmeth"),type:q(r,".ilt-type-sel"),traps:trapsOf(r)};}
+  document.querySelectorAll("#dbody tr[data-pest]").forEach(function(r){d.dev.push(devRow(r));});
+  document.querySelectorAll("#ilt-tbody tr.ilt-device-row").forEach(function(r){d.ilt.push(devRow(r));});
+  document.querySelectorAll("#abody .area-card").forEach(function(c){
+    var a={nm:q(c,".area-nm"),car:q(c,".area-car"),pest:q(c,".area-pest"),act:q(c,".area-act"),mats:[]};
+    c.querySelectorAll(".area-mat-block").forEach(function(b){
+      a.mats.push({mat:q(b,".area-mat-sel"),qty:q(b,".area-qty"),unit:q(b,".area-unit"),
+        meth:q(b,".area-meth"),dil:q(b,".area-dil-yn"),conc:q(b,".area-conc"),sol:q(b,".area-sol")});
+    });
+    d.areas.push(a);
+  });
+  document.querySelectorAll("#equip-body tr").forEach(function(r){
+    d.equip.push({cat:q(r,".equip-cat"),mat:q(r,".equip-mat"),qty:q(r,".equip-qty"),meth:q(r,".equip-meth")});
+  });
+  document.querySelectorAll("#rec-body tr").forEach(function(r){
+    var rc={type:q(r,".rec-type"),notes:q(r,".rec-notes"),devs:[],pids:[]};
+    r.querySelectorAll(".dev-blk").forEach(function(b){
+      rc.devs.push({t:q(b,".dev-type"),f:q(b,".dev-fail"),nos:getNums(b)});});
+    r.querySelectorAll(".obs-thumb").forEach(function(im){if(im.dataset.pid)rc.pids.push(im.dataset.pid);});
+    d.recs.push(rc);
+  });
+  document.querySelectorAll("#quote-body tr").forEach(function(r){
+    d.quotes.push({area:q(r,".quote-area"),cat:q(r,".quote-cat"),item:q(r,".quote-item"),
+      qty:draftVal(r.querySelector("input[type=number]"))});
+  });
+  return d;
+}
+function draftHasContent(d){
+  return !!(d.csVal||d.f.tin||d.f.tout||d.f.arpt||d.f.ccnf||d.pills.length||d.recs.length||
+    d.equip.length||d.quotes.length||d.sig||
+    d.areas.some(function(a){return a.nm||a.pest;})||
+    d.dev.concat(d.ilt).some(function(r){return r.dons||(r.dact&&r.dact!=="--");}));
+}
+function draftSaveNow(){
+  clearTimeout(_draftTimer);_draftTimer=null;
+  if(_draftOff||_draftRestoring)return;
+  try{
+    var d=draftSnapshot();
+    if(!draftHasContent(d)){localStorage.removeItem(DRAFT_KEY);return;}
+    localStorage.setItem(DRAFT_KEY,JSON.stringify(d));
+  }catch(e){console.log("Draft not saved:",e.message);}
+}
+function draftSchedule(){
+  if(_draftOff||_draftRestoring)return;
+  clearTimeout(_draftTimer);_draftTimer=setTimeout(draftSaveNow,1000);
+}
+function draftClear(){
+  clearTimeout(_draftTimer);_draftTimer=null;_draftPendingCust=null;
+  try{localStorage.removeItem(DRAFT_KEY);}catch(e){}
+  var b=g("draft-banner");if(b)b.style.display="none";
+}
+// Only the technician's own input saves; the restore's events are untrusted.
+["input","change","click"].forEach(function(ev){
+  document.addEventListener(ev,function(e){
+    if(!e.isTrusted)return;
+    var f=draftForm();if(f&&f.contains(e.target))draftSchedule();
+  },true);
+});
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"&&_draftTimer)draftSaveNow();});
+window.addEventListener("pagehide",function(){if(_draftTimer)draftSaveNow();});
+
+function draftSet(el,v,fire){
+  if(!el||v===undefined||v===null)return;
+  if(el.type==="checkbox")el.checked=!!v;else el.value=v;
+  if(fire)el.dispatchEvent(new Event("change",{bubbles:true}));
+}
+function draftNums(scope,nums){
+  var sel=scope?scope.querySelector(".num-pick"):null;if(!sel)return;
+  (nums||[]).forEach(function(n){sel.value=String(n);sel.dispatchEvent(new Event("change"));});
+}
+function draftDevRow(r,s){
+  var q=function(c){return r.querySelector(c);};
+  draftSet(q(".dons"),s.dons);draftSet(q(".dcar"),s.dcar);
+  if(s.type)draftSet(q(".ilt-type-sel"),s.type);
+  draftSet(q(".dact"),s.dact,true);           // L/M/H brings up the trap row
+  draftSet(q(".dmat"),s.dmat,true);           // fills the L-number
+  draftSet(q(".dqty"),s.dqty);draftSet(q(".dunit"),s.dunit);draftSet(q(".dmeth"),s.dmeth);
+  var nx=r.nextElementSibling;
+  if(s.traps&&s.traps.length&&nx&&nx.className==="trapno-row")draftNums(nx,s.traps);
+}
+// The customer, once its option exists (residential customers load later).
+function draftApplyCustomer(d){
+  var cs=g("cs");if(!cs||!d.csVal)return true;
+  var idx=-1;
+  if(d.csVal==="NEW")idx=Array.prototype.findIndex.call(cs.options,function(o){return o.value==="NEW";});
+  else idx=Array.prototype.findIndex.call(cs.options,function(o){return o.value&&o.text.trim()===d.csText;});
+  if(idx<0)return false;
+  var was=_draftRestoring;_draftRestoring=true;
+  try{
+    cs.selectedIndex=idx;cs.dispatchEvent(new Event("change"));
+    draftSet(g("site-sel"),d.site);
+    ["new-cust-name","addr","pzone","pzone2","pcode"].forEach(function(id){draftSet(g(id),d.f[id]);});
+  }finally{_draftRestoring=was;}
+  return true;
+}
+function draftRestore(){
+  var raw=null,d=null;
+  try{raw=localStorage.getItem(DRAFT_KEY);d=raw?JSON.parse(raw):null;}catch(e){d=null;}
+  if(!d||!d.rNo)return;
+  var held={};
+  try{held=Object.assign({},JSON.parse(localStorage.getItem("org_rpts")||"{}"),
+                         JSON.parse(localStorage.getItem("org_pending")||"{}"));}catch(e){}
+  if(held[d.rNo]){console.log("Draft "+d.rNo+" is already saved - discarded");draftClear();return;}
+  _draftRestoring=true;
+  try{
+    rNo=d.rNo;g("rno").textContent=rNo;
+    if(!draftApplyCustomer(d)){
+      // Not in the list yet: keep it, and try again as the lists load.
+      _draftPendingCust={csVal:d.csVal,csText:d.csText,site:d.site};
+      var tries=0,t=setInterval(function(){
+        tries++;
+        if(!_draftPendingCust){clearInterval(t);return;}
+        if(draftApplyCustomer(d)){_draftPendingCust=null;clearInterval(t);draftSaveNow();}
+        else if(tries>=60){clearInterval(t);
+          var b=g("draft-banner");if(b)b.innerHTML+="<br><b>Customer \""+esc(d.csText)+
+            "\" is not in the list yet - please select it again.</b>";}
+      },2000);
+    }
+    if(d.plan&&g("plan-sel"))g("plan-sel").value=d.plan;
+    DRAFT_IDS.forEach(function(id){
+      if(["new-cust-name","addr","pzone","pzone2","pcode"].indexOf(id)>=0&&d.csVal)return;
+      draftSet(g(id),d.f[id],["tsel","fusel"].indexOf(id)>=0);
+    });
+    var tg=g("devices-serviced-toggle");
+    if(tg&&tg.checked!==(d.devOn!==false)){tg.checked=(d.devOn!==false);toggleDevicesServiced(tg);}
+    document.querySelectorAll(".pill input").forEach(function(i){
+      i.checked=d.pills.indexOf(i.value)>=0;tgP(i);});
+    var dr=document.querySelectorAll("#dbody tr[data-pest]");
+    (d.dev||[]).forEach(function(s,i){if(dr[i])draftDevRow(dr[i],s);});
+    var il=document.querySelectorAll("#ilt-tbody tr.ilt-device-row").length;
+    for(var k=il;k<(d.ilt||[]).length;k++)addILTRow();
+    var ir=document.querySelectorAll("#ilt-tbody tr.ilt-device-row");
+    (d.ilt||[]).forEach(function(s,i){if(ir[i])draftDevRow(ir[i],s);});
+    var ac=document.querySelectorAll("#abody .area-card").length;
+    for(k=ac;k<(d.areas||[]).length;k++)addArea();
+    var cards=document.querySelectorAll("#abody .area-card");
+    (d.areas||[]).forEach(function(a,i){
+      var c=cards[i];if(!c)return;
+      draftSet(c.querySelector(".area-nm"),a.nm);draftSet(c.querySelector(".area-car"),a.car);
+      var ps=c.querySelector(".area-pest");draftSet(ps,a.pest);
+      if(a.pest)onAreaPestChange(ps);           // builds the first material block
+      draftSet(c.querySelector(".area-act"),a.act);
+      for(var j=c.querySelectorAll(".area-mat-block").length;j<a.mats.length;j++)addAreaMat(c.id);
+      var bl=c.querySelectorAll(".area-mat-block");
+      a.mats.forEach(function(m,j){
+        var b=bl[j];if(!b)return;
+        draftSet(b.querySelector(".area-mat-sel"),m.mat,true);
+        draftSet(b.querySelector(".area-unit"),m.unit);draftSet(b.querySelector(".area-meth"),m.meth);
+        var dl=b.querySelector(".area-dil-yn");draftSet(dl,m.dil);if(dl)toggleAreaDil(dl);
+        if(m.dil==="yes"){draftSet(b.querySelector(".area-conc"),m.conc);
+          draftSet(b.querySelector(".area-sol"),m.sol);calcAreaConc(b);}
+        draftSet(b.querySelector(".area-qty"),m.qty);
+      });
+    });
+    (d.equip||[]).forEach(function(e){
+      addEquipRow();var r=g("equip-body").lastElementChild;
+      draftSet(r.querySelector(".equip-cat"),e.cat,true);draftSet(r.querySelector(".equip-mat"),e.mat,true);
+      draftSet(r.querySelector(".equip-qty"),e.qty);draftSet(r.querySelector(".equip-meth"),e.meth);
+    });
+    var wantPids={};
+    (d.recs||[]).forEach(function(rc){
+      addRecRow();var r=g("rec-body").lastElementChild;
+      draftSet(r.querySelector(".rec-type"),rc.type,true);
+      draftSet(r.querySelector(".rec-notes"),rc.notes);
+      var list=r.querySelector(".dev-obs-list"),add=r.querySelector(".add-dev-btn");
+      for(var j=list?list.children.length:0;list&&j<rc.devs.length;j++)list.appendChild(makeDevBlock());
+      var bl=r.querySelectorAll(".dev-blk");
+      rc.devs.forEach(function(v,j){var b=bl[j];if(!b)return;
+        draftSet(b.querySelector(".dev-type"),v.t);draftSet(b.querySelector(".dev-fail"),v.f);
+        draftNums(b,v.nos);});
+      (rc.pids||[]).forEach(function(p){wantPids[p]=r.querySelector(".obs-thumbs");});
+    });
+    (d.quotes||[]).forEach(function(qq){
+      addQuoteRow();var r=g("quote-body").lastElementChild;
+      draftSet(r.querySelector(".quote-area"),qq.area);draftSet(r.querySelector(".quote-cat"),qq.cat,true);
+      draftSet(r.querySelector(".quote-item"),qq.item);draftSet(r.querySelector("input[type=number]"),qq.qty);
+    });
+    if(d.sig){
+      sigD=d.sig;hMk=true;
+      var im=new Image();im.onload=function(){try{
+        var dpr=window.devicePixelRatio||1;sigCtx.drawImage(im,0,0,sigCanvas.width/dpr,sigCanvas.height/dpr);}catch(e){}};
+      im.src=d.sig;
+      sigCanvas.classList.add("signed");sigCanvas.style.pointerEvents="none";
+      g("sph").style.display="none";g("sab").style.display="none";
+      g("sth").src=d.sig;g("sts").textContent="Signed (restored)";g("scf").classList.add("show");
+    }
+    if(Object.keys(wantPids).length)photoAll(function(all){
+      _draftRestoring=true;
+      try{all.forEach(function(p){if(wantPids[p.id])photoThumb(p,wantPids[p.id]);});}
+      finally{_draftRestoring=false;}
+      photoBannerRefresh();
+    });
+  }catch(e){console.log("Draft restore error:",e.message);}
+  finally{_draftRestoring=false;}
+  var when=new Date(d.savedAt);
+  var b=g("draft-banner");
+  if(b){
+    b.innerHTML="&#9989; Your unfinished report <b>"+esc(d.rNo)+"</b>"+
+      (d.csText?" for <b>"+esc(d.csText)+"</b>":"")+" was restored (last saved "+
+      (isNaN(when)?"":esc(photoTime(when).substring(0,16)))+"). Please check it before submitting. "+
+      "<button type=\"button\" id=\"draft-discard\" style=\"margin-left:4px;background:none;border:1px solid #b00020;"+
+      "color:#b00020;border-radius:4px;font-size:11px;padding:2px 8px;cursor:pointer\">Discard it and start a fresh report</button>";
+    b.style.display="block";
+    g("draft-discard").onclick=function(){
+      if(!confirm("Discard the unfinished report "+d.rNo+"?\n\nEverything typed in it will be lost. Its photos stay saved on the phone."))return;
+      draftClear();newRpt();
+    };
+  }
+  window.scrollTo(0,0);
+  console.log("Draft "+d.rNo+" restored");
 }
 
 function addRecRow(){
@@ -5354,6 +5605,7 @@ g("cs").addEventListener("change",function(){
     ms.addEventListener("change",function(){var rn=getRegNo(ms.value);regInp.value=rn;regInp.classList.toggle("has-reg",!!rn);});
   });
   initSig();areaCnt=0;addArea();rfRpts();rfPending();setTimeout(function(){addILTRow();},100);
+  setTimeout(draftRestore,400);      // after the first light-trap row exists
   setTimeout(syncFromSheets,1500);
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
   setTimeout(loadResidentialCustomers,2500);
