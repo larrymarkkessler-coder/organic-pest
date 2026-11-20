@@ -1294,6 +1294,7 @@ container that is the amount left, not the number of containers.</div>
 <button class="addb" id="equip-addbtn" onclick="addEquipRow()">+ Add item</button>
 </div></div>
 <div class="card"><div class="chd">6. Observations and Recommendations</div><div class="cbd" style="overflow-x:auto">
+<div id="photo-banner" style="display:none;background:#fff8e1;border:1px solid #e0c060;border-radius:6px;padding:7px 9px;font-size:12px;color:#5a4500;margin-bottom:8px"></div>
 <table style="width:100%"><thead><tr><th style="width:130px">Type</th><th>Recommendation</th><th style="width:30px"></th></tr></thead>
 <tbody id="rec-body"></tbody></table>
 <button class="addb" onclick="addRecRow()">+ Add recommendation</button>
@@ -3122,6 +3123,7 @@ function parkRpt(){
     var a=JSON.parse(localStorage.getItem("org_pending")||"{}");
     if(a[d.reportNo])throw new Error("Report "+d.reportNo+" is already awaiting signature");
     a[d.reportNo]=d;localStorage.setItem("org_pending",JSON.stringify(a));
+    photoMarkUsed(photoIdsInForm(),d.reportNo);   // before newRpt clears section 6
     var parkedNo=d.reportNo;
     rfPending();
     newRpt();                          // fresh form + fresh report number
@@ -3340,6 +3342,7 @@ function doSubmit(){
   var btn=g("subbtn");btn.disabled=true;btn.textContent="Saving...";
   try{
     var d=collect();saveRpt(d);markPlannerDoneNew(d);updateReconFromRpt(d);
+    photoMarkUsed(photoIdsInForm(),d.reportNo);
     btn.textContent="Saved - tap to start new report";btn.disabled=false;btn.onclick=newRpt;
     var st=g("svst");st.className="svst ok";
     st.innerHTML="Saved: "+d.reportNo+" <button class=\"pbtn\" onclick=\"dlPDF('"+d.reportNo+"')\">Download PDF</button>";
@@ -3378,6 +3381,11 @@ function newRpt(){
   document.querySelectorAll(".reg-no-field").forEach(function(f){f.value="";f.classList.remove("has-reg");});
   // Reset equipment rows
   var eqReset=g("equip-body");if(eqReset)eqReset.innerHTML="";
+  // Sections 6 and 7 were never cleared, so the last report's observations,
+  // photos and quotation requests rode into the next one (found 20/11/2026).
+  var recReset=g("rec-body");if(recReset)recReset.innerHTML="";
+  var qReset=g("quote-body");if(qReset)qReset.innerHTML="";
+  setTimeout(photoBannerRefresh,200);
   rNo=genNo();g("rno").textContent=rNo;g("svcd").valueAsDate=new Date();
   // Show tech name in header if locked
   if(window.TECH_LOCK){
@@ -4545,26 +4553,279 @@ function makeDevObsPanel(){
   list.appendChild(makeDevBlock());
   return box;
 }
-// Photos are shrunk before they are held - a raw phone photo runs to several
-// megabytes and would not survive the trip to the sheet.
+/* \u2500\u2500 PHOTO STORE (Larry, 20/11/2026) \u2500\u2500
+   Technicians were losing section 6 photos before the report was sent. A photo
+   lived only as a thumbnail in the open page, and opening the phone's camera
+   app sends the browser to the background - Android often closes it there to
+   free memory, and on return the page reloads with the photo gone.
+   Now:
+   1. the camera opens INSIDE the platform where the phone allows it, so the
+      browser never goes to the background (the phone's camera app stays as
+      the fallback);
+   2. every photo is written to the phone's own storage (IndexedDB - far larger
+      than the 5 MB that holds reports) the moment it is taken, before anything
+      can lose it, and survives the page closing or the phone restarting;
+   3. "Saved photos" on any section 6 row lists every photo held on the phone,
+      searchable, to add (back) to the report;
+   4. date and time (DD/MM/YYYY HH:MM:SS), customer, site, technician and GPS
+      when the phone gives it are printed ONTO the photo, so the stamp travels
+      with it into the PDF and cannot be separated from it.
+   A photo on a report leaves the phone only once that report's PDF is
+   confirmed on Drive and 30 days have passed; one never put on a report is
+   kept 60 days. The report itself still carries its photos exactly as before,
+   so the PDF, Drive upload and retries are unchanged. */
+var PHOTO_DB="opps_photos",PHOTO_KEEP_USED_DAYS=30,PHOTO_KEEP_UNUSED_DAYS=60;
+var _photoDb=null,_photoFix=null,_camFailed=false;
+function photoDb(cb){
+  if(_photoDb){cb(_photoDb);return;}
+  try{
+    var rq=indexedDB.open(PHOTO_DB,1);
+    rq.onupgradeneeded=function(){var db=rq.result;
+      if(!db.objectStoreNames.contains("photos"))db.createObjectStore("photos",{keyPath:"id"});};
+    rq.onsuccess=function(){_photoDb=rq.result;cb(_photoDb);};
+    rq.onerror=function(){console.log("Photo store unavailable:",rq.error);cb(null);};
+  }catch(e){console.log("Photo store unavailable:",e.message);cb(null);}
+}
+function photoPut(rec,cb){photoDb(function(db){
+  if(!db){if(cb)cb(false);return;}
+  try{
+    var tx=db.transaction("photos","readwrite");tx.objectStore("photos").put(rec);
+    tx.oncomplete=function(){if(cb)cb(true);};
+    tx.onerror=function(){console.log("Photo not saved:",tx.error);if(cb)cb(false);};
+  }catch(e){console.log("Photo not saved:",e.message);if(cb)cb(false);}
+});}
+function photoAll(cb){photoDb(function(db){
+  if(!db){cb([]);return;}
+  try{
+    var rq=db.transaction("photos","readonly").objectStore("photos").getAll();
+    rq.onsuccess=function(){cb(rq.result||[]);};rq.onerror=function(){cb([]);};
+  }catch(e){cb([]);}
+});}
+function photoDel(ids){photoDb(function(db){
+  if(!db||!ids.length)return;
+  try{var st=db.transaction("photos","readwrite").objectStore("photos");
+    ids.forEach(function(id){st.delete(id);});}catch(e){}
+});}
+function photoTime(d){
+  function p(n){return String(n).padStart(2,"0");}
+  return p(d.getDate())+"/"+p(d.getMonth()+1)+"/"+d.getFullYear()+" "+
+         p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+// GPS is best effort: asked for when the camera opens, never waited for.
+function photoFixRequest(){
+  try{
+    if(!navigator.geolocation)return;
+    navigator.geolocation.getCurrentPosition(function(p){
+      _photoFix={lat:p.coords.latitude,lng:p.coords.longitude,
+                 acc:Math.round(p.coords.accuracy||0),at:Date.now()};
+    },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:120000});
+  }catch(e){}
+}
+function photoContext(){
+  var cust="",site="",tech="";
+  try{cust=g("cs").value==="NEW"?(g("new-cust-name").value.trim()||"New customer"):(selC?selC[0]:"");}catch(e){}
+  try{site=g("site-sel")?g("site-sel").value:"";}catch(e){}
+  var n=function(x){return String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");};
+  if(site&&n(site)===n(cust))site="";
+  try{tech=TD[g("tsel").value]||"";}catch(e){}
+  if(!tech&&window.TECH_LOCK)tech=(typeof TECH_SHORT!=="undefined"&&TECH_SHORT[window.TECH_LOCK])||window.TECH_LOCK;
+  return {customer:cust,site:site,tech:tech,formReportNo:(typeof rNo!=="undefined"?rNo:"")};
+}
+// Draw any image or video frame at most 1000px, stamp it, save it to the phone.
+// cb(rec,savedOnPhone)
+function photoFromDrawable(src,sw,sh,source,cb){
+  var mx=1000,w=sw,h=sh;
+  if(w>mx||h>mx){var sc=Math.min(mx/w,mx/h);w=Math.round(w*sc);h=Math.round(h*sc);}
+  var c=document.createElement("canvas");c.width=w;c.height=h;
+  var x=c.getContext("2d");x.drawImage(src,0,0,w,h);
+  var now=new Date(),ctx=photoContext();
+  var fix=(_photoFix&&Date.now()-_photoFix.at<600000)?_photoFix:null;
+  var lines=[photoTime(now)+(ctx.tech?"  |  "+ctx.tech:""),
+             (ctx.customer||"No customer selected")+(ctx.site?" - "+ctx.site:"")];
+  if(fix)lines.push("GPS "+fix.lat.toFixed(5)+", "+fix.lng.toFixed(5)+" (\u00B1"+fix.acc+"m)");
+  var fs=Math.max(13,Math.round(Math.min(w,h)/32)),lh=Math.round(fs*1.3),pad=Math.round(fs*0.5);
+  var bh=lines.length*lh+pad*2;
+  x.fillStyle="rgba(0,0,0,0.6)";x.fillRect(0,h-bh,w,bh);
+  x.fillStyle="#fff";x.font="bold "+fs+"px Arial, Helvetica, sans-serif";x.textBaseline="top";
+  lines.forEach(function(t,i){x.fillText(t,pad,h-bh+pad+i*lh,w-pad*2);});
+  var uri;
+  try{uri=c.toDataURL("image/jpeg",0.6);}catch(e){alert("The photo could not be processed ("+e.message+"). Please take it again.");return;}
+  var rec={id:"P"+now.getTime()+"-"+Math.random().toString(36).slice(2,7),
+    takenAt:now.toISOString(),stamp:photoTime(now),customer:ctx.customer,site:ctx.site,
+    tech:ctx.tech,formReportNo:ctx.formReportNo,lat:fix?fix.lat:null,lng:fix?fix.lng:null,
+    acc:fix?fix.acc:null,source:source,reportNo:"",usedAt:"",data:uri};
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
+  photoPut(rec,function(ok){cb(rec,ok);});
+}
+// The phone camera app's photo (fallback route) - a raw phone photo runs to
+// several megabytes, so it is shrunk the same way before it is held.
 function shrinkImage(file,cb){
   var fr=new FileReader();
   fr.onload=function(){
     var img=new Image();
-    img.onload=function(){
-      var mx=1000,w=img.width,h=img.height;
-      if(w>mx||h>mx){var sc=Math.min(mx/w,mx/h);w=Math.round(w*sc);h=Math.round(h*sc);}
-      var c=document.createElement("canvas");c.width=w;c.height=h;
-      c.getContext("2d").drawImage(img,0,0,w,h);
-      try{cb(c.toDataURL("image/jpeg",0.6));}catch(e){}
-    };
+    img.onload=function(){photoFromDrawable(img,img.width,img.height,"phone camera",cb);};
     img.src=fr.result;
   };
   fr.readAsDataURL(file);
 }
+function photoIdsInForm(){
+  var ids=[];
+  document.querySelectorAll("#rec-body .obs-thumb").forEach(function(im){
+    if(im.dataset.pid)ids.push(im.dataset.pid);});
+  return ids;
+}
+function photoMarkUsed(ids,rno){
+  if(!ids||!ids.length)return;
+  photoAll(function(all){
+    var at=new Date().toISOString();
+    all.forEach(function(r){
+      if(ids.indexOf(r.id)>=0){r.reportNo=rno;r.usedAt=at;photoPut(r);}
+    });
+    setTimeout(photoBannerRefresh,300);
+  });
+}
+// Section 6 banner: photos held on the phone that are on no report and not
+// on the report being filled in - typically the ones a reload took off it.
+function photoBannerRefresh(){
+  var b=g("photo-banner");if(!b)return;
+  photoAll(function(all){
+    var inForm=photoIdsInForm();
+    var n=all.filter(function(r){return !r.reportNo&&inForm.indexOf(r.id)<0;}).length;
+    if(!n){b.style.display="none";return;}
+    b.innerHTML="\uD83D\uDCF7 <b>"+n+" photo"+(n>1?"s":"")+"</b> saved on this phone "+
+      (n>1?"are":"is")+" not on a report yet. Tap <b>\uD83D\uDDC2 Saved photos</b> on a "+
+      "recommendation below to add "+(n>1?"them":"it")+".";
+    b.style.display="block";
+  });
+}
+// Runs once at start-up: clear out what is safe to clear, then the banner.
+function photoHousekeep(){
+  photoAll(function(all){
+    var now=Date.now(),pend={},park={},gone=[];
+    try{pend=JSON.parse(localStorage.getItem("org_pdf_pending")||"{}");}catch(e){}
+    try{park=JSON.parse(localStorage.getItem("org_pending")||"{}");}catch(e){}
+    all.forEach(function(r){
+      var age=(now-Date.parse(r.usedAt||r.takenAt))/86400000;
+      if(isNaN(age))return;
+      if(r.reportNo){if(!pend[r.reportNo]&&!park[r.reportNo]&&age>PHOTO_KEEP_USED_DAYS)gone.push(r.id);}
+      else if(age>PHOTO_KEEP_UNUSED_DAYS)gone.push(r.id);
+    });
+    if(gone.length){photoDel(gone);console.log("Photo store: cleared "+gone.length+" old photo(s)");}
+    photoBannerRefresh();
+  });
+}
+function photoThumb(rec,thumbs){
+  var im=document.createElement("img");
+  im.src=rec.data;im.className="obs-thumb";im.dataset.pid=rec.id||"";
+  im.title="Tap to take off this report (it stays saved on the phone)";
+  im.style.cssText="height:46px;border:1px solid #b9d6c2;border-radius:3px;cursor:pointer";
+  im.onclick=function(){if(im.parentNode)im.parentNode.removeChild(im);photoBannerRefresh();};
+  thumbs.appendChild(im);
+}
+function photoModal(id,title){
+  var m=g(id);
+  if(!m){
+    m=document.createElement("div");m.className="add-modal";m.id=id;
+    m.innerHTML="<div class=\"sig-modal-box\"><h3>"+title+"</h3><div class=\"pm-body\"></div></div>";
+    document.body.appendChild(m);
+  }
+  return m;
+}
+/* In-platform camera. onShot(rec,ok) per photo; fallback() opens the phone
+   camera app. Fallback must be called from a tap (phones refuse to open a
+   file picker otherwise), so a failure shows a button rather than calling it. */
+function camOpen(onShot,fallback){
+  if(_camFailed||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){fallback();return;}
+  photoFixRequest();
+  var m=photoModal("cam-modal","Take photo"),body=m.querySelector(".pm-body"),stream=null,taken=0;
+  body.innerHTML=
+    "<video playsinline muted autoplay style=\"width:100%;max-height:60vh;background:#000;border-radius:6px\"></video>"+
+    "<div class=\"cam-st\" style=\"font-size:12px;color:#555;margin:6px 0\">Starting camera...</div>"+
+    "<div class=\"cam-strip\" style=\"display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px\"></div>"+
+    "<div class=\"modal-btns\"><button class=\"modal-btn cancel cam-done\">Done</button>"+
+    "<button class=\"modal-btn save cam-shot\" disabled>\uD83D\uDCF7 Capture</button></div>";
+  var v=body.querySelector("video"),st=body.querySelector(".cam-st"),
+      strip=body.querySelector(".cam-strip"),shot=body.querySelector(".cam-shot");
+  function stop(){try{if(stream)stream.getTracks().forEach(function(t){t.stop();});}catch(e){}stream=null;}
+  function close(){stop();m.classList.remove("show");}
+  body.querySelector(".cam-done").onclick=close;
+  m.classList.add("show");
+  navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},
+      width:{ideal:1920},height:{ideal:1080}}})
+    .then(function(s){
+      stream=s;v.srcObject=s;try{v.play();}catch(e){}
+      st.textContent="Point at the problem and tap Capture. Each photo is saved on the phone straight away.";
+      shot.disabled=false;
+    })
+    .catch(function(e){
+      console.log("In-platform camera unavailable:",e&&e.name);
+      _camFailed=true;stop();
+      st.innerHTML="The camera could not open inside the platform"+
+        (e&&e.name==="NotAllowedError"?" (camera permission refused)":"")+".";
+      shot.disabled=false;shot.textContent="Use phone camera";
+      shot.onclick=function(){close();fallback();};
+    });
+  shot.onclick=function(){
+    if(!stream||!v.videoWidth)return;
+    shot.disabled=true;setTimeout(function(){shot.disabled=false;},3000);
+    photoFromDrawable(v,v.videoWidth,v.videoHeight,"platform camera",function(rec,ok){
+      taken++;onShot(rec,ok);
+      var t=document.createElement("img");t.src=rec.data;
+      t.style.cssText="height:40px;border:1px solid #b9d6c2;border-radius:3px";strip.appendChild(t);
+      st.textContent=taken+" photo"+(taken>1?"s":"")+" taken"+
+        (ok?" and saved on this phone.":" - NOT saved on the phone: submit the report before leaving the page.");
+      shot.disabled=false;
+    });
+  };
+}
+// Every photo held on the phone, newest first, searchable. onPick(rec).
+function photoPicker(onPick){
+  var m=photoModal("photo-pick","Photos saved on this phone"),body=m.querySelector(".pm-body");
+  body.innerHTML=
+    "<input type=\"search\" class=\"pp-q\" placeholder=\"Search customer, technician or date (e.g. 20/11)\" "+
+    "style=\"width:100%;padding:8px;border:1.5px solid #ddd;border-radius:7px;font-size:13px;box-sizing:border-box\">"+
+    "<label style=\"display:block;font-size:12px;margin:6px 0\"><input type=\"checkbox\" class=\"pp-all\"> "+
+    "Also show photos already on a submitted report</label>"+
+    "<div class=\"pp-list\" style=\"display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px\"></div>"+
+    "<div class=\"modal-btns\" style=\"margin-top:10px\"><button class=\"modal-btn cancel pp-close\">Close</button></div>";
+  var q=body.querySelector(".pp-q"),allBox=body.querySelector(".pp-all"),list=body.querySelector(".pp-list");
+  body.querySelector(".pp-close").onclick=function(){m.classList.remove("show");};
+  var recs=[];
+  function render(){
+    var term=q.value.trim().toLowerCase(),inForm=photoIdsInForm();
+    var rows=recs.filter(function(r){
+      if(r.reportNo&&!allBox.checked)return false;
+      if(!term)return true;
+      return [r.stamp,r.customer,r.site,r.tech,r.reportNo].join(" ").toLowerCase().indexOf(term)>=0;
+    });
+    list.innerHTML="";
+    if(!rows.length){list.innerHTML="<div style=\"font-size:12px;color:#777\">No photos found.</div>";return;}
+    rows.forEach(function(r){
+      var on=inForm.indexOf(r.id)>=0;
+      var card=document.createElement("div");
+      card.style.cssText="border:1px solid #cfe3d6;border-radius:6px;padding:4px;font-size:11px;"+
+        "cursor:"+(on?"default":"pointer")+";opacity:"+(on?"0.55":"1");
+      card.innerHTML="<img src=\""+r.data+"\" style=\"width:100%;height:80px;object-fit:cover;border-radius:4px\">"+
+        "<div><b>"+esc(r.stamp||"")+"</b></div><div>"+esc(r.customer||"")+(r.site?" - "+esc(r.site):"")+"</div>"+
+        "<div style=\"color:#555\">"+esc(r.tech||"")+"</div>"+
+        "<div style=\"color:"+(on?"#1a5c38":r.reportNo?"#777":"#a06000")+"\">"+
+        (on?"On this report":r.reportNo?"On report "+esc(r.reportNo):"Not on a report yet")+"</div>";
+      if(!on)card.onclick=function(){onPick(r);render();};
+      list.appendChild(card);
+    });
+  }
+  q.oninput=render;allBox.onchange=render;
+  list.innerHTML="<div style=\"font-size:12px;color:#777\">Loading...</div>";
+  m.classList.add("show");
+  photoAll(function(all){
+    recs=all.sort(function(a,b){return String(b.takenAt).localeCompare(String(a.takenAt));});
+    render();
+  });
+}
 function makePhotoBtn(){
   var wrap=document.createElement("div");
   wrap.style.cssText="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px";
+  // Fallback: the phone's own camera app.
   var inp=document.createElement("input");
   inp.type="file";inp.accept="image/*";
   inp.setAttribute("capture","environment");
@@ -4573,21 +4834,25 @@ function makePhotoBtn(){
   btn.type="button";btn.textContent="\uD83D\uDCF7 Take photo";
   btn.style.cssText="background:#1a5c38;border:none;color:#fff;font-size:11px;"+
     "font-weight:bold;border-radius:3px;padding:4px 10px;cursor:pointer";
-  btn.onclick=function(){inp.click();};
+  var pick=document.createElement("button");
+  pick.type="button";pick.className="obs-saved-btn";pick.textContent="\uD83D\uDDC2 Saved photos";
+  pick.style.cssText="background:none;border:1px solid #1a5c38;color:#1a5c38;font-size:11px;"+
+    "font-weight:bold;border-radius:3px;padding:3px 9px;cursor:pointer";
+  var warn=document.createElement("span");
+  warn.style.cssText="display:none;font-size:11px;color:#b00020;width:100%";
+  warn.textContent="A photo could not be saved on this phone - submit this report before leaving the page.";
   var thumbs=document.createElement("span");thumbs.className="obs-thumbs";
   thumbs.style.cssText="display:inline-flex;gap:4px;flex-wrap:wrap";
+  function got(rec,ok){photoThumb(rec,thumbs);if(!ok)warn.style.display="block";}
+  btn.onclick=function(){camOpen(got,function(){photoFixRequest();inp.click();});};
+  pick.onclick=function(){photoPicker(function(rec){photoThumb(rec,thumbs);photoBannerRefresh();});};
   inp.onchange=function(){
     var f=inp.files&&inp.files[0];
-    if(f)shrinkImage(f,function(uri){
-      var im=document.createElement("img");
-      im.src=uri;im.className="obs-thumb";im.title="Tap to remove";
-      im.style.cssText="height:46px;border:1px solid #b9d6c2;border-radius:3px;cursor:pointer";
-      im.onclick=function(){if(im.parentNode)im.parentNode.removeChild(im);};
-      thumbs.appendChild(im);
-    });
+    if(f)shrinkImage(f,got);
     inp.value="";
   };
-  wrap.appendChild(btn);wrap.appendChild(inp);wrap.appendChild(thumbs);
+  wrap.appendChild(btn);wrap.appendChild(pick);wrap.appendChild(inp);
+  wrap.appendChild(thumbs);wrap.appendChild(warn);
   return wrap;
 }
 
@@ -5102,6 +5367,7 @@ g("cs").addEventListener("change",function(){
   // Reports first: a report must reach the office before its PDF is filed.
   setTimeout(reconcileReports,5000);
   setTimeout(reconcilePdfs,8000);
+  setTimeout(photoHousekeep,9000);   // after the PDF retries have had their go
   if(isMobile){
     document.querySelectorAll(".navbtn").forEach(function(btn){
       if(btn.textContent.indexOf("Digest")>=0||btn.textContent.indexOf("Stock Recon")>=0)
