@@ -18,11 +18,16 @@
     - the report marks it Serviced and emails Larry, Wayne and Veronica to
       invoice; "Awaiting invoice" here records the Sage invoice number.
   New ongoing customer (14/11/2026): the same booking with type "ongoing" -
-  the first visit goes on the planner as "<Planner name> (RES-0001)" exactly
-  like a residential job, and the register keeps the legal name, zone,
-  frequency and report recipient for the change form.
+  since 25/11/2026 the first visit goes on the planner under the PLAIN planner
+  name (no "(RES-0001)"; the number is in the Notes, "New customer RES-0001 |"),
+  the platform lists it under its legal name, and the register keeps the legal
+  name, zone, frequency and report recipient for the change form.
+  "Post to Group" (renamed 25/11/2026): the booker picks the residential group
+  for a residential job or the Organic Pest Prevention group for an ongoing one.
   The day list shows each job already on the technician's planner with its
-  estimated time (job_times.json, last month's report PDFs) against 8 hours.
+  estimated time (job_times.json, last month's report PDFs) against 8 hours,
+  and the month grid (25/11/2026) shows the technician's whole month - tap a
+  day to book it.
   ?invoice=RES-0001 opens that booking's invoice form (link in the email).
   ?test=1 adds the LARRY test account to the technician list.
 -->
@@ -82,6 +87,23 @@ textarea{min-height:70px;resize:vertical}
 .seg button.on{background:var(--g);border-color:var(--g);color:#fff;font-weight:bold}
 .bk .ty{font-size:11px;padding:1px 7px;border-radius:10px;background:#e8e3f5;color:#4a3a8a;margin-left:6px;font-weight:normal}
 .empty{color:var(--mut);text-align:center;padding:20px}
+/* Month planner grid (25/11/2026): the chosen technician's whole month, Mon-Fri */
+.mhd{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:14px 0 6px}
+.mhd b{font-size:14px;color:var(--g)}
+.mhd button{border:1px solid var(--bd);background:#fff;border-radius:6px;padding:6px 12px;font-size:16px;color:var(--g);cursor:pointer}
+.mg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}
+.mg .wh{font-size:11px;font-weight:bold;color:var(--mut);text-align:center;padding:2px 0}
+.mc{border:1px solid var(--bd);border-radius:5px;background:#fff;min-height:70px;padding:3px;font-size:10px;line-height:1.3;cursor:pointer;overflow:hidden}
+.mc.blank{border:0;background:none;cursor:default}
+.mc .mt{display:flex;justify-content:space-between;gap:2px;font-size:11px;margin-bottom:2px}
+.mc .mt b{font-size:12px}.mc .mt span{color:var(--mut)}
+.mc .j{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc .j.r{color:var(--g2);font-weight:bold}
+.mc.amb{background:#fff6e0}.mc.red{background:#fdecea}
+.mc.past{opacity:.55}
+.mc.sel{box-shadow:0 0 0 2px var(--g);border-color:var(--g)}
+.mc.today .mt b{color:#fff;background:var(--g);border-radius:8px;padding:0 4px}
+.mlink{background:none;border:0;color:var(--g);font-size:13px;text-decoration:underline;padding:0;cursor:pointer}
 </style>
 </head>
 <body>
@@ -150,6 +172,7 @@ textarea{min-height:70px;resize:vertical}
     </div>
     <label>Technician <span class="req">*</span></label>
     <select id="f-tech"><option value="">-- Select technician --</option></select>
+    <div id="month"></div>
     <div id="day" class="day hint">Pick a date to see each technician's day.</div>
     <label>Notes for the technician</label>
     <textarea id="f-notes" placeholder="e.g. Estate gate PIN 4471, ask for Mrs Smith at the guardhouse; dog in the yard"></textarea>
@@ -223,12 +246,70 @@ function loadBookings(){
 
 // ── the technician's day ──────────────────────────────────────────────
 function jobsOn(date,key){return planner.filter(function(j){return j.date===date&&j.techKey===key;});}
+// A booked job: residential "<Name> (RES-0001)", or an ongoing customer's first
+// visit under its plain planner name with "New customer RES-0001 | ..." in Notes.
+function isBooked(j){return /\(RES-\d+\)$/.test(j.customer)||/^(Residential|New customer) RES-\d+ \|/.test(j.notes||"");}
 function est(j){
-  if(/\(RES-\d+\)$/.test(j.customer))return RES_MIN;
+  if(isBooked(j))return RES_MIN;
   return times[j.customer]||0;
 }
-function resTime(j){var m=/^Residential RES-\d+ \| (\d{1,2}:\d{2})/.exec(j.notes||"");return m?m[1]:"";}
-function renderDay(){
+function resTime(j){var m=/^(?:Residential|New customer) RES-\d+ \| (\d{1,2}:\d{2})/.exec(j.notes||"");return m?m[1]:"";}
+function renderDay(){renderDayList();renderMonth();}
+
+// ── the technician's month (25/11/2026) ───────────────────────────────
+// Larry: allocating a job was hard without seeing the technician's whole
+// month. Once a technician is picked, their month shows as a Mon-Fri grid:
+// each day's jobs and estimated hours (same times as the day list), shaded
+// amber over 80% of 8 hours and red over 8. Tap a day to book that date.
+var mView="", mOpen=lsGet("monthOpen")!=="0";
+function isoOf(dt){return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
+function toggleMonth(){mOpen=!mOpen;lsSet("monthOpen",mOpen?"1":"0");renderMonth();}
+function shiftMonth(n){
+  var ym=mView||(g("f-date").value||isoOf(new Date())).substring(0,7);
+  var dt=new Date(+ym.slice(0,4),+ym.slice(5,7)-1+n,1);
+  mView=isoOf(dt).substring(0,7);renderMonth();
+}
+function pickDay(iso){
+  g("f-date").value=iso;mView=iso.substring(0,7);renderDay();
+  var el=g("day");if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderMonth(){
+  var box=g("month"),key=g("f-tech").value,date=g("f-date").value;
+  if(!key||!plannerOk){box.innerHTML="";return;}
+  var who=esc(techName(key));
+  if(!mOpen){box.innerHTML="<button class='btn sec' type='button' onclick='toggleMonth()'>Show "+who+"'s month planner</button>";return;}
+  var ym=mView||(date||isoOf(new Date())).substring(0,7);
+  var y=+ym.slice(0,4),mo=+ym.slice(5,7)-1,days=new Date(y,mo+1,0).getDate();
+  var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var by={},count=0;
+  planner.forEach(function(j){if(j.techKey===key&&String(j.date).indexOf(ym)===0){(by[j.date]=by[j.date]||[]).push(j);count++;}});
+  var today=isoOf(new Date()),cells="",started=false,weekend=[];
+  for(var d=1;d<=days;d++){
+    var dt=new Date(y,mo,d),dow=dt.getDay(),iso=isoOf(dt),js=by[iso]||[];
+    if(dow===0||dow===6){
+      if(js.length)weekend.push(wd(iso)+" "+dmy(iso).substring(0,5)+": "+js.map(function(j){return j.customer;}).join(", "));
+      continue;
+    }
+    if(!started){for(var b=1;b<dow;b++)cells+="<div class='mc blank'></div>";started=true;}
+    js=js.slice().sort(function(a,b){var ra=resTime(a),rb=resTime(b);return (ra||"99")<(rb||"99")?-1:1;});
+    var m=0;js.forEach(function(j){m+=est(j);});
+    var cls="mc"+(m>DAY_MIN?" red":(m>DAY_MIN*0.8?" amb":""))+(iso===date?" sel":"")+(iso===today?" today":"")+(iso<today?" past":"");
+    var shown=js.slice(0,5).map(function(j){
+      var rt=resTime(j);
+      return "<div class='j"+(isBooked(j)?" r":"")+"' title='"+esc(j.customer)+"'>"+(rt?esc(rt)+" ":"")+esc(j.customer)+"</div>";
+    }).join("")+(js.length>5?"<div class='j'>+"+(js.length-5)+" more</div>":"");
+    cells+="<div class='"+cls+"' onclick=\"pickDay('"+iso+"')\"><div class='mt'><b>"+d+"</b><span>"+(js.length?hm(m):"")+"</span></div>"+shown+"</div>";
+  }
+  box.innerHTML="<div class='mhd'><button type='button' onclick='shiftMonth(-1)' aria-label='Previous month'>&lsaquo;</button>"+
+    "<b>"+who+" - "+months[mo]+" "+y+"</b>"+
+    "<button type='button' onclick='shiftMonth(1)' aria-label='Next month'>&rsaquo;</button></div>"+
+    "<div class='mg'><div class='wh'>Mon</div><div class='wh'>Tue</div><div class='wh'>Wed</div><div class='wh'>Thu</div><div class='wh'>Fri</div>"+cells+"</div>"+
+    (weekend.length?"<div class='hint'>Weekend: "+esc(weekend.join(" | "))+"</div>":"")+
+    "<div class='hint'>"+count+" job"+(count===1?"":"s")+" this month. Tap a day to book it. Amber = over 80% of 8 hours, red = over 8 hours; green names are bookings. "+
+    "<button type='button' class='mlink' onclick='toggleMonth()'>Hide month</button></div>";
+}
+
+function renderDayList(){
   var date=g("f-date").value, sel=g("f-tech"), key=sel.value;
   // technician dropdown: each one's day at a glance
   for(var i=1;i<sel.options.length;i++){
@@ -245,7 +326,7 @@ function renderDay(){
   var js=jobsOn(date,key).slice().sort(function(a,b){var ra=resTime(a),rb=resTime(b);return (ra||"99")<(rb||"99")?-1:1;});
   var total=0,unknown=0,rows=js.map(function(j){
     var m=est(j);total+=m;if(!m)unknown++;
-    var isRes=/\(RES-\d+\)$/.test(j.customer),rt=resTime(j);
+    var isRes=isBooked(j),rt=resTime(j);
     return "<tr class='"+(isRes?"res":"")+"'><td>"+esc(j.customer)+(rt?" ("+rt+")":"")+"</td><td class='t'>"+(m?hm(m)+(isRes?" est":""):"-")+"</td></tr>";
   }).join("");
   var pct=Math.min(100,total/DAY_MIN*100),cls=total>DAY_MIN?"red":(total>DAY_MIN*0.8?"amb":"");
@@ -313,7 +394,8 @@ function book(){
       "Address: "+d.address+"\n"+
       "Treatment: "+what+"\n"+
       (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
-      "\nIt is on your planner. On the report select customer: "+r.customer;
+      (ong?"\nIt is on your planner as "+r.customer+". On the report select planner name: "+r.customer+" (customer: "+d.legalName+")"
+          :"\nIt is on your planner. On the report select customer: "+r.customer);
     var url="https://wa.me/"+waNumber(t[2])+"?text="+encodeURIComponent(text);
     // Residential WhatsApp group (Wayne's, 10/11/2026): a web page cannot post to
     // a group, so wa.me with NO number opens WhatsApp's chat picker with the text
@@ -331,11 +413,11 @@ function book(){
     m.innerHTML="<div class='msg ok'><b>Booked "+esc(r.bookingNo)+"</b> - on "+esc(t[1])+"'s planner for "+wd(d.date)+" "+dmy(d.date)+" at "+esc(d.time)+".</div>"+
       (/^FAILED/.test(r.bookingEmail||"")?"<div class='msg err'>The office email did not send: "+esc(r.bookingEmail)+"</div>":"")+
       "<a class='btn wa' href='"+url+"' target='_blank' rel='noopener'>Send to "+esc(t[1])+" on WhatsApp</a>"+
-      "<a class='btn wa' href='"+groupUrl+"' target='_blank' rel='noopener'>Post to residential group</a>"+
-      "<div class='hint'>Opens WhatsApp with the message filled in - pick the residential group and press send.</div>"+
+      "<a class='btn wa' href='"+groupUrl+"' target='_blank' rel='noopener'>Post to Group</a>"+
+      "<div class='hint'>Opens WhatsApp with the message filled in - pick the "+(ong?"<b>Organic Pest Prevention</b> group (ongoing customer)":"<b>residential</b> group (residential job)")+" and press send.</div>"+
       "<button class='btn sec' onclick='resetForm()'>New booking</button>";
     b.classList.add("hide");
-    planner.push({date:d.date,techKey:key,techName:d.techName,customer:r.customer,notes:"Residential "+r.bookingNo+" | "+d.time,frequency:"Once-off"});
+    planner.push({date:d.date,techKey:key,techName:d.techName,customer:r.customer,notes:(ong?"New customer ":"Residential ")+r.bookingNo+" | "+d.time,frequency:"Once-off"});
     renderDay();
   }).catch(function(e){
     m.innerHTML="<div class='msg err'>Not booked: "+esc(e.message)+". Check your signal and press Book again - it will not double-book.</div>";
@@ -409,7 +491,7 @@ function cancelBk(no){
   var m=g("m-"+no);m.innerHTML="<div class='msg ok'>Cancelling...</div>";
   post({action:"cancelResidentialBooking",bookingNo:no,by:by,reason:reason}).then(function(r){
     if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
-    planner=planner.filter(function(j){return j.customer.indexOf("("+no+")")<0;});
+    planner=planner.filter(function(j){return j.customer.indexOf("("+no+")")<0&&String(j.notes||"").indexOf(no+" |")<0;});
     loadBookings();renderDay();
   }).catch(function(e){m.innerHTML="<div class='msg err'>"+esc(e.message)+"</div>";});
 }
@@ -419,7 +501,7 @@ function cancelBk(no){
   var sel=g("f-tech");TECHS.forEach(function(t){var o=document.createElement("option");o.value=t[0];o.text=t[1];sel.appendChild(o);});
   var tm=new Date(Date.now()+864e5);   // tomorrow, local date
   g("f-date").value=tm.getFullYear()+"-"+String(tm.getMonth()+1).padStart(2,"0")+"-"+String(tm.getDate()).padStart(2,"0");
-  g("f-date").addEventListener("change",renderDay);sel.addEventListener("change",renderDay);
+  g("f-date").addEventListener("change",function(){mView="";renderDay();});sel.addEventListener("change",renderDay);
   g("f-by").addEventListener("change",function(){g("f-by2").classList.toggle("hide",this.value!=="OTHER");});
   var lb=lsGet("bookedBy");if(lb){g("f-by").value=lb;if(lb==="OTHER"){g("f-by2").classList.remove("hide");g("f-by2").value=lsGet("bookedBy2");}}
   loadPlanner();loadTimes();loadBookings();
