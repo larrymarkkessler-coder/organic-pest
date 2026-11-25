@@ -2873,8 +2873,14 @@ function collect(){
     custEmail:g("cust-email").value.trim(),
     custCell:g("cust-cell")?g("cust-cell").value.trim():"",
     equipment:collectEquip(),
-    quotations:collectQuotes()};
+    quotations:collectQuotes(),
+    stationCheck:stPayload_()};
 }
+/* Bait-station register / CARs (stations.js, Larry 25/11/2026). Every call is
+   guarded: if stations.js did not load or throws, the report is exactly as before. */
+function stPayload_(){try{return (window.ST&&ST.active())?ST.payload():null;}catch(e){console.log("stations payload:",e.message);return null;}}
+function stErrors_(){try{return (window.ST&&ST.active())?ST.errors():[];}catch(e){console.log("stations check:",e.message);return [];}}
+function stSaved_(d){try{if(window.ST)ST.onSaved(d);}catch(e){}}
 
 /* ── STORAGE ── */
 function saveRpt(d){
@@ -3127,7 +3133,7 @@ function parkRpt(){
     var a=JSON.parse(localStorage.getItem("org_pending")||"{}");
     if(a[d.reportNo])throw new Error("Report "+d.reportNo+" is already awaiting signature");
     a[d.reportNo]=d;localStorage.setItem("org_pending",JSON.stringify(a));
-    photoMarkUsed(photoIdsInForm(),d.reportNo);   // before newRpt clears section 6
+    photoMarkUsed(photoIdsInForm(),d.reportNo);stSaved_(d);   // before newRpt clears section 6
     draftClear();
     var parkedNo=d.reportNo;
     rfPending();
@@ -3334,6 +3340,7 @@ function validateReport(requireSig){
   var custCell2=g("cust-cell")?g("cust-cell").value.trim():"";
   if(!custEmail&&!custCell2) errors.push("Please enter either a customer email address or cell number in Section 8");
   else if(custEmail&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(custEmail)) errors.push("Customer contact email address is not valid");
+  errors=errors.concat(stErrors_());
   return errors;
 }
 
@@ -3347,7 +3354,7 @@ function doSubmit(){
   var btn=g("subbtn");btn.disabled=true;btn.textContent="Saving...";
   try{
     var d=collect();saveRpt(d);markPlannerDoneNew(d);updateReconFromRpt(d);
-    photoMarkUsed(photoIdsInForm(),d.reportNo);
+    photoMarkUsed(photoIdsInForm(),d.reportNo);stSaved_(d);
     _draftOff=true;draftClear();       // saved: nothing more to keep until a new report
     btn.textContent="Saved - tap to start new report";btn.disabled=false;btn.onclick=newRpt;
     var st=g("svst");st.className="svst ok";
@@ -3564,6 +3571,8 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
       doc.text(doc.splitTextToSize(sh2.cap||"",pw).slice(0,2),px,py+ph+3.5);
     });
   }
+  try{if(data.stationCheck&&window.ST&&ST.pdfPages)ST.pdfPages(doc,data,{M:M,CW:CW,H:H,G:G});}
+  catch(e){console.log("station PDF pages:",e.message);}
   return doc;
 }
 
@@ -5644,4 +5653,4 @@ g("cs").addEventListener("change",function(){
 }
 window.addEventListener("load",init);
 
-</script></body></html>
+</script><script src="stations.js?v=1"></script></body></html>
