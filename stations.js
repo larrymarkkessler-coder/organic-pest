@@ -105,20 +105,27 @@
     }
     return null;
   }
-  function refreshSites(force) {
+  // An empty list is never kept (a site loaded later must show up at once), and
+  // picking a customer re-asks if the list is more than 2 minutes old.
+  var _sitesAsking = false;
+  function refreshSites(force, maxAge) {
     var cached = lsGet(LS_SITES);
     if (cached) S.sites = cached;
-    if (!force && cached && Date.now() - (cached.at || 0) < SITES_MAX_AGE) return;
-    if (!gas()) return;
+    var age = cached ? Date.now() - (cached.at || 0) : Infinity;
+    var fresh = cached && cached.sites && cached.sites.length && age < (maxAge || SITES_MAX_AGE);
+    if (!force && fresh) return;
+    if (!gas() || _sitesAsking) return;
+    _sitesAsking = true;
     fetch(gas() + "?action=getStationSites&t=" + Date.now())
       .then(function (r) { return r.json(); })
       .then(function (res) {
+        _sitesAsking = false;
         if (!res || res.status !== "ok" || !Array.isArray(res.sites)) return;
-        S.sites = {at: Date.now(), sites: res.sites};
+        S.sites = {at: res.sites.length ? Date.now() : 0, sites: res.sites};
         lsSet(LS_SITES, S.sites);
         check(true);
       })
-      .catch(function () {});
+      .catch(function () { _sitesAsking = false; });
   }
 
   // ── state for the report being filled in (kept on the phone per report number) ──
@@ -749,7 +756,7 @@
     try {
       housekeep();
       refreshSites(false);
-      var cs = g("cs"); if (cs) cs.addEventListener("change", function () { setTimeout(check, 50); });
+      var cs = g("cs"); if (cs) cs.addEventListener("change", function () { refreshSites(false, 120000); setTimeout(check, 50); });
       var ss = g("site-sel"); if (ss) ss.addEventListener("change", function () { setTimeout(check, 50); });
       setInterval(function () { try { check(); retryNumbers(); } catch (e) {} }, 1500);
       check();
