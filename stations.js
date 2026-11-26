@@ -57,8 +57,26 @@
   var MISSING_OBS = {"Rodents": "BMM - Bait Station Missing", "Flies": "UM - Unit Missing",
                      "Moths": "UM - Unit Missing", "Cockroaches": "MR - Monitor Missing"};
   var PARTY = ["Client", "Organic Pest", "Both Client and OPPS"];
-  var FU_STATUS = ["Not Clear", "Clear", "Closed"];
-  var FU_ACTION = ["Additional 2 Day Follow Up", "Additional 7 Day Follow Up", "Sign Off as Clear"];
+  // Follow-ups (Larry, 26/11/2026): Cockroaches every 2 working days and Rodents every 7, three
+  // "Clear" in a row (Rodents then a 4th, final visit); any other CAR is checked at the next monthly
+  // service. The office books the visits on the planner; the technician records each one here.
+  var FU_STATUS = ["In progress", "Clear", "Concluded"];
+  var FU_SCHEDULED = {"Cockroaches": 1, "Rodents": 1};
+  function fuOptions(c) { return FU_SCHEDULED[c.pestType] ? ["In progress", "Clear"] : FU_STATUS; }
+  function fuPlan(c) {                    // "1:2026-11-30;2:2026-12-02;F:2026-12-17" -> [{n, date}]
+    return String(c.plan || "").split(";").map(function (x) { var m = /^(\w+):(\d{4}-\d\d-\d\d)$/.exec(x.trim()); return m ? {n: m[1], date: m[2]} : null; })
+      .filter(function (x) { return x; });
+  }
+  function fuNext(c) {                    // the next planned visit not yet recorded
+    var pl = fuPlan(c), done = +c.visits || 0;
+    return pl.length > done ? pl[done] : null;
+  }
+  function fuDue(c, date) {
+    if (!FU_SCHEDULED[c.pestType]) return !!date && date > String(c.raised || "");   // the next service after the CAR
+    var nx = fuNext(c);
+    return !!(nx && date && nx.date <= date);
+  }
+  function fuClosesCar(c, f) { return !!f && (f.status === "Concluded" || (!FU_SCHEDULED[c.pestType] && f.status === "Clear")); }
   var NO_SCAN = ["Label damaged / unreadable", "Label missing", "Camera not working", "Other"];
 
   var S = {sites: null, reg: null, key: "", rno: null, st: null, photos: {}, busy: false};
@@ -246,8 +264,7 @@
   function openCarsAfter() {
     var n = 0;
     ((S.reg && S.reg.openCars) || []).forEach(function (c) {
-      var f = S.st.followUps[c.carNo];
-      if (!(f && (f.status === "Closed" || f.action === "Sign Off as Clear"))) n++;
+      if (!fuClosesCar(c, S.st.followUps[c.carNo])) n++;
     });
     S.st.cars.forEach(function (c) { if (!closedAtCreation(c.correction)) n++; });
     return n;
@@ -305,13 +322,22 @@
     }
     var oc = (S.reg.openCars || []);
     if (oc.length) {
-      h += "<div style=\"margin-top:10px;font-weight:bold;color:#b00020\">Open CARs from earlier visits - record the follow-up</div>";
+      var today = g("svcd") ? g("svcd").value : "";
+      h += "<div style=\"margin-top:10px;font-weight:bold;color:#b00020\">Open CARs - follow-ups</div>";
       oc.forEach(function (c) {
-        var f = S.st.followUps[c.carNo] || {};
-        h += "<div class=\"st-fu\" data-car=\"" + esc(c.carNo) + "\" style=\"border-top:1px solid #dbe9e0;padding:5px 0\">" +
-          "<div><b>" + esc(c.carNo) + "</b> " + esc(c.raised) + (c.deviceId ? " &middot; " + esc(c.deviceId) : "") + " &middot; " + esc(c.observation) +
-          "<div style=\"color:#666;font-size:11px\">" + esc(c.correction) + (c.location ? " &middot; " + esc(c.location) : "") + "</div></div>" +
-          "<div style=\"display:flex;gap:4px;flex-wrap:wrap;margin-top:3px\">" + sel("st-fu-st", ["Status..."].concat(FU_STATUS), f.status) + sel("st-fu-ac", ["Action..."].concat(FU_ACTION), f.action) + "</div></div>";
+        var f = S.st.followUps[c.carNo] || {}, due = fuDue(c, today), nx = fuNext(c), vn = (+c.visits || 0) + 1;
+        var pest = CAR_TREE[c.pestType], obsOpts = ["Select..."].concat(pest && pest.ok ? [pest.ok] : ["Clear - no fault found"], pest ? Object.keys(pest.obs) : []);
+        h += "<div class=\"st-fu\" data-car=\"" + esc(c.carNo) + "\" style=\"border-top:1px solid #dbe9e0;padding:6px 0\">" +
+          "<div><b>" + esc(c.carNo) + "</b> " + esc(String(c.raised || "").split("-").reverse().join("/")) + (c.deviceId ? " &middot; " + esc(c.deviceId) : "") + " &middot; " + esc(c.observation) +
+          "<div style=\"color:#666;font-size:11px\">" + esc(c.correction) + (c.location ? " &middot; " + esc(c.location) : "") + "</div>" +
+          "<div class=\"st-fu-when\" style=\"font-size:11px;color:" + (due ? "#b00020" : "#666") + "\">" +
+          (FU_SCHEDULED[c.pestType] ? "Follow-up visit No. " + vn + (nx ? (nx.n === "F" ? " (final)" : "") + " planned " + esc(nx.date.split("-").reverse().join("/")) : "")
+                                    : "Checked at the next monthly service - visit No. " + vn) +
+          (+c.clears ? " &middot; " + (+c.clears) + " clear in a row" : "") + (due ? " &middot; <b>due - record it</b>" : " &middot; not due today (record it only if you checked it)") + "</div></div>" +
+          "<div style=\"display:grid;grid-template-columns:1fr;gap:4px;margin-top:4px\">" +
+          sel("st-fu-ob", obsOpts, f.observation) +
+          "<input type=\"text\" class=\"st-fu-ac\" placeholder=\"Action taken at this follow-up\" value=\"" + esc(f.action || "") + "\" style=\"font-size:12px;box-sizing:border-box;width:100%\">" +
+          sel("st-fu-st", ["Status..."].concat(fuOptions(c)), f.status) + "</div></div>";
       });
     }
     p.innerHTML = h;
@@ -331,12 +357,13 @@
     for (var q = 0; q < fus.length; q++) (function (div) {
       var no = div.getAttribute("data-car");
       function upd() {
-        var st = div.querySelector(".st-fu-st").value, ac = div.querySelector(".st-fu-ac").value;
-        var f = {status: FU_STATUS.indexOf(st) >= 0 ? st : "", action: FU_ACTION.indexOf(ac) >= 0 ? ac : ""};
-        if (f.status || f.action) S.st.followUps[no] = f; else delete S.st.followUps[no];
+        var st = div.querySelector(".st-fu-st").value, ob = div.querySelector(".st-fu-ob").value, ac = div.querySelector(".st-fu-ac").value.trim();
+        var f = {status: FU_STATUS.indexOf(st) >= 0 ? st : "", observation: ob && ob !== "Select..." ? ob : "", action: ac};
+        if (f.status || f.observation || f.action) S.st.followUps[no] = f; else delete S.st.followUps[no];
         saveState(); setArpt();
       }
-      div.querySelector(".st-fu-st").onchange = upd; div.querySelector(".st-fu-ac").onchange = upd;
+      div.querySelector(".st-fu-st").onchange = upd; div.querySelector(".st-fu-ob").onchange = upd;
+      div.querySelector(".st-fu-ac").oninput = upd;
     })(fus[q]);
     setArpt();
   }
@@ -764,6 +791,14 @@
     if (left.length) out.push("Bait stations & devices: " + left.length + " of " + S.reg.devices.length +
       " not done yet - " + left.map(function (d) { return d.id; }).join(", ") + ". Scan each one (or mark it missing).");
     S.st.cars.forEach(function (c) { if (!c.photoId || !S.photos[c.photoId]) out.push((c.carNo || "A CAR") + " has no photo."); });
+    var day = g("svcd") ? g("svcd").value : "";
+    ((S.reg && S.reg.openCars) || []).forEach(function (c) {
+      var f = S.st.followUps[c.carNo] || {};
+      if (fuDue(c, day) && (!f.status || !f.observation))
+        out.push("Follow-up of " + c.carNo + (c.deviceId ? " (device " + c.deviceId + ")" : "") + " is due: choose what you found and the status.");
+      else if (f.status === "In progress" && !f.action)
+        out.push("Follow-up of " + c.carNo + ": say what action you took.");
+    });
     return out.concat(quoteErrors());
   }
   function payload() {
@@ -784,12 +819,35 @@
     var fus = Object.keys(S.st.followUps).map(function (no) {
       var f = S.st.followUps[no], c0 = null;
       ((S.reg.openCars) || []).forEach(function (x) { if (x.carNo === no) c0 = x; });
-      return {carNo: no, date: date, status: f.status || "", action: f.action || "",
-              deviceId: c0 ? c0.deviceId : "", observation: c0 ? c0.observation : "", raised: c0 ? c0.raised : ""};
-    });
+      if (!c0) return null;
+      return {carNo: no, date: date, visitNo: (+c0.visits || 0) + 1, status: f.status || "", observation: f.observation || "",
+              action: f.action || "", pestType: c0.pestType || "", deviceId: c0.deviceId || "", carObservation: c0.observation || "",
+              raised: c0.raised || ""};
+    }).filter(function (x) { return x && (x.status || x.observation || x.action); });
     return {siteCode: S.reg.siteCode, onSite: S.reg.devices.length,
             done: S.reg.devices.filter(done).length, devices: devs, cars: cars, followUps: fus,
             openAfter: openCarsAfter(), contact: (S.reg.contact && S.reg.contact.name) || ""};
+  }
+  // CAR photos are not kept inside the saved report on the phone: six photos filled the phone's
+  // storage in the trial (26/11/2026) and the office got a blank PDF. The photo store keeps them
+  // (30 days after use); fill() puts them back before a PDF is made or a report is sent.
+  function lean(d) {
+    if (!d || !d.stationCheck || !Array.isArray(d.stationCheck.cars)) return d;
+    var c = JSON.parse(JSON.stringify(d));
+    c.stationCheck.cars.forEach(function (x) { if (x.photoId) x.photo = ""; });
+    return c;
+  }
+  function fill(d, cb) {
+    var cars = d && d.stationCheck && Array.isArray(d.stationCheck.cars) ? d.stationCheck.cars : [];
+    var want = cars.filter(function (x) { return x.photoId && !x.photo; });
+    if (!want.length || !window.photoAll) { cb(d); return; }
+    var called = false, t = setTimeout(function () { if (!called) { called = true; cb(d); } }, 6000);
+    window.photoAll(function (all) {
+      if (called) return;
+      var by = {}; (all || []).forEach(function (r) { by[r.id] = r.data; });
+      want.forEach(function (x) { if (by[x.photoId]) x.photo = by[x.photoId]; });
+      called = true; clearTimeout(t); cb(d);
+    });
   }
   function onSaved(d) {
     try {
@@ -840,10 +898,11 @@
            x.scanned ? (x.scannedAt || "Y").slice(-5) : "No" + (x.reason ? " - " + x.reason : ""), x.carNo || (x.status === "car" ? "pending" : "")]);
     });
     if ((sc.followUps || []).length) {
-      y += 3; line("Follow-up of open CARs from earlier visits", true, 8.5); y += 1;
+      y += 3; line("Follow-ups of open CARs", true, 8.5); y += 1;
       sc.followUps.forEach(function (f) {
-        line(f.carNo + (f.deviceId ? " (" + f.deviceId + ")" : "") + " raised " + (f.raised || "") + " - " + (f.observation || "") + ":  " +
-             (f.status || "-") + (f.action ? ", " + f.action : ""));
+        line(f.carNo + (f.deviceId ? " (" + f.deviceId + ")" : "") + " raised " + String(f.raised || "").split("-").reverse().join("/") + " - " +
+             (f.carObservation || "") + ".  Follow-up visit No. " + (f.visitNo || "") + ": " + (f.observation || "-") +
+             (f.action ? "; action taken: " + f.action : "") + ".  Status: " + (f.status || "-"));
       });
     }
     (sc.cars || []).forEach(function (c) {
@@ -875,7 +934,7 @@
     });
   }
 
-  window.ST = {active: active, errors: errors, payload: payload, onSaved: onSaved, pdfPages: pdfPages,
+  window.ST = {active: active, errors: errors, payload: payload, onSaved: onSaved, pdfPages: pdfPages, lean: lean, fill: fill,
                _state: function () { return S; }, _check: check, _refreshSites: refreshSites, _onCode: onCode, CAR_TREE: CAR_TREE};
 
   // keep only the 15 newest report states on the phone

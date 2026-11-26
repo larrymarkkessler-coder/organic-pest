@@ -2881,10 +2881,15 @@ function collect(){
 function stPayload_(){try{return (window.ST&&ST.active())?ST.payload():null;}catch(e){console.log("stations payload:",e.message);return null;}}
 function stErrors_(){try{return (window.ST&&ST.active())?ST.errors():[];}catch(e){console.log("stations check:",e.message);return [];}}
 function stSaved_(d){try{if(window.ST)ST.onSaved(d);}catch(e){}}
+// CAR photos stay in the phone's photo store, not inside the saved report (trial 26/11/2026: six photos
+// filled the phone's storage and the office got a blank PDF). Only reports with CARs are touched.
+function stLean_(d){try{return (window.ST&&ST.lean&&d&&d.stationCheck)?ST.lean(d):d;}catch(e){return d;}}
+function stFill_(d,cb){var done=false;function go(x){if(done)return;done=true;cb(x);}
+  try{if(window.ST&&ST.fill&&d&&d.stationCheck){ST.fill(d,go);return;}}catch(e){}go(d);}
 
 /* ── STORAGE ── */
 function saveRpt(d){
-  var a=JSON.parse(localStorage.getItem("org_rpts")||"{}");a[d.reportNo]=d;
+  var a=JSON.parse(localStorage.getItem("org_rpts")||"{}");a[d.reportNo]=stLean_(d);
   localStorage.setItem("org_rpts",JSON.stringify(a));
   // Cross off the job on the planner immediately
   try{
@@ -2983,7 +2988,7 @@ function processSheetData(res){
         purposes:(r["Purposes"]||"").split(", ").filter(Boolean),
         signatureData:r["Signed"]==="YES"?"data:synced":"",
         materialsUsed:r["Materials Used"]||"",
-        areas:[],devices:[],recStructural:"",recStorage:"",recSanitation:"",cash:"",followUp:r["Follow Up"]||""};
+        areas:[],devices:[],recStructural:"",recStorage:"",recSanitation:"",cash:"",followUp:r["Follow Up"]||"",_fromSheet:true};
       added++;
     } else {
       if(!local[rno].techKey&&techKey)local[rno].techKey=techKey;
@@ -3132,7 +3137,7 @@ function parkRpt(){
     d.parkedAt=new Date().toISOString();
     var a=JSON.parse(localStorage.getItem("org_pending")||"{}");
     if(a[d.reportNo])throw new Error("Report "+d.reportNo+" is already awaiting signature");
-    a[d.reportNo]=d;localStorage.setItem("org_pending",JSON.stringify(a));
+    a[d.reportNo]=stLean_(d);localStorage.setItem("org_pending",JSON.stringify(a));
     photoMarkUsed(photoIdsInForm(),d.reportNo);stSaved_(d);   // before newRpt clears section 6
     draftClear();
     var parkedNo=d.reportNo;
@@ -3161,8 +3166,9 @@ function pendPDF(rn){
   try{
     var a=JSON.parse(localStorage.getItem("org_pending")||"{}"),d=a[rn];
     if(!d){alert("Report not found");return;}
+    stFill_(d,function(d){try{
     var doc=buildPDF(d);if(!doc){alert("PDF library not loaded. Please refresh.");return;}
-    doc.save("UNSIGNED_Service_Report_"+d.reportNo+".pdf");
+    doc.save("UNSIGNED_Service_Report_"+d.reportNo+".pdf");}catch(e){alert("PDF error: "+e.message);}});
   }catch(e){alert("PDF error: "+e.message);}
 }
 
@@ -3224,7 +3230,11 @@ function submitPending(){
   try{
     var a=JSON.parse(localStorage.getItem("org_pending")||"{}"),d=a[mSigFor];
     if(!d)throw new Error("Report is no longer in the pending list");
-    d.signatureData=mSigCanvas.toDataURL("image/png");
+    if(d.stationCheck&&!d._stFilled){var sigNow=mSigCanvas.toDataURL("image/png");
+      stFill_(d,function(full){full._stFilled=true;a[mSigFor]=full;
+        try{localStorage.setItem("org_pending",JSON.stringify(a));}catch(e){}
+        mSigCanvas._stSig=sigNow;submitPending();});return;}
+    d.signatureData=mSigCanvas._stSig||mSigCanvas.toDataURL("image/png");delete d._stFilled;mSigCanvas._stSig=null;
     d.submittedAt=new Date().toISOString();   // the PDF prints this as "Signed:"
     delete d.parkedAt;
     saveRpt(d);markPlannerDoneNew(d);updateReconFromRpt(d);
@@ -3584,8 +3594,9 @@ function dlPDF(rno){
   try{
     var all2=JSON.parse(localStorage.getItem("org_rpts")||"{}");var data=all2[rno];
     if(!data){alert("Report not found");return;}
+    stFill_(data,function(data){try{
     var doc=buildPDF(data);if(!doc){alert("PDF library not loaded. Please refresh.");return;}
-    doc.save("Service_Report_"+data.reportNo+".pdf");
+    doc.save("Service_Report_"+data.reportNo+".pdf");}catch(e){alert("PDF error: "+e.message);}});
   }catch(e){alert("PDF error: "+e.message);}
 }
 
@@ -3598,6 +3609,15 @@ function uploadPDFtoDrive(rno){
     // twice and does not re-email the customer.
     pdfPendingAdd(rno);
     var all2=JSON.parse(localStorage.getItem("org_rpts")||"{}");var data=all2[rno];if(!data)return;
+    // A copy rebuilt from the office sheet holds no sections, devices, photos or signature: a PDF made
+    // from it reached the customer blank (ORG-73518, 26/11/2026). The office already has the report.
+    if(data._fromSheet||data.signatureData==="data:synced"){console.log("PDF not made for "+rno+": only the office copy is on this phone");pdfPendingClear(rno);return;}
+    if(data.stationCheck&&!data._stFilled){stFill_(data,function(full){full._stFilled=true;uploadPDFtoDrive_(rno,full);});return;}
+    uploadPDFtoDrive_(rno,data);
+  }catch(e){console.log("PDF upload error:",e.message);}
+}
+function uploadPDFtoDrive_(rno,data){
+  try{
     var jsPDF=window.jspdf&&window.jspdf.jsPDF;if(!jsPDF)return;
     var doc=buildPDF(data);if(!doc)return;
     var pdfBase64=doc.output("datauristring").split(",")[1];
@@ -5660,4 +5680,4 @@ g("cs").addEventListener("change",function(){
 }
 window.addEventListener("load",init);
 
-</script><script src="stations.js?v=4"></script></body></html>
+</script><script src="stations.js?v=5"></script></body></html>
