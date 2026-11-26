@@ -3452,7 +3452,7 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   tbl(["Area","CAR","Pests","Act.","Material","Qty","Unit","Method","Reg.No."],[0.16,0.06,0.06,0.06,0.37,0.07,0.07,0.07,0.08],ar,1);
   sH("4.  PEST DEVICES");
   var dr=[];(data.devices||[]).forEach(function(d2){var qos=parseFloat(d2.qty_on_site||0);var qus=parseFloat(d2.qty_used||0);var hasData=qos>0||qus>0||(d2.material&&d2.material!=="Select material"&&d2.material!=="")||(d2.activity&&d2.activity!=="--");if(hasData)dr.push([(d2.device||"").substring(0,35),d2.qty_on_site,d2.car,d2.pests,d2.activity,(d2.material||"").substring(0,48),d2.qty_used,d2.unit,d2.method,d2.lnumber||""]);});
-  tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],data.stationCheck?[0.13,0.05,0.09,0.05,0.05,0.37,0.06,0.06,0.06,0.08]:[0.18,0.05,0.04,0.05,0.05,0.37,0.06,0.06,0.06,0.08],dr,1);
+  tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],[0.18,0.05,0.04,0.05,0.05,0.37,0.06,0.06,0.06,0.08],dr,1);
   var trapRows=[];(data.devices||[]).forEach(function(d3){
     if(d3.activity_traps&&d3.activity_traps.length)
       trapRows.push([d3.device||"",d3.activity_traps.join(", ")]);
@@ -5660,4 +5660,4 @@ g("cs").addEventListener("change",function(){
 }
 window.addEventListener("load",init);
 
-</script><script src="stations.js?v=3"></script></body></html>
+</script><script src="stations.js?v=4"></script></body></html>

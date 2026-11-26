@@ -667,10 +667,11 @@
     out.ilt = document.querySelector("#ilt-tbody tr.ilt-device-row .dcar");
     return out;
   }
+  // The PDF's CAR column is narrow and its widths must not change (the bait station
+  // check and the Site Report read that table), so the cell holds the short numbers:
+  // CAR-00002 and CAR-00003 -> "2,3". The full numbers are on the CAR pages.
   function carText(list) {
-    if (!list.length) return "";
-    if (list.length === 1) return list[0];
-    return list.map(function (n) { return String(n).replace(/^CAR-/, ""); }).join(",");
+    return list.map(function (n) { var m = /^CAR-0*(\d+)$/.exec(String(n)); return m ? m[1] : "?"; }).join(",");
   }
   function fillCarCells() {
     var cells = carCells(), by = {ext: [], int: [], ilt: [], moth: []};
@@ -688,7 +689,8 @@
       }
       if (v) {
         el.dataset.stCar = "1"; el.readOnly = true; el.style.background = "#e8f3ec";
-        el.style.width = Math.max(38, v.length * 7 + 6) + "px"; el.title = "CARs raised on these devices";
+        el.style.width = Math.max(38, v.length * 7 + 6) + "px";
+        el.title = "CARs raised on these devices: " + by[b].join(", ");
       } else { delete el.dataset.stCar; el.readOnly = false; el.style.background = ""; el.style.width = "38px"; }
     });
   }
