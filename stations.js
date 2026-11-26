@@ -89,6 +89,31 @@
   var S = {sites: null, reg: null, key: "", rno: null, st: null, photos: {}, busy: false};
 
   function g(id) { return document.getElementById(id); }
+  (function () {
+    try {
+      var css = document.createElement("style");
+      css.textContent = "input.st-cb{-webkit-appearance:checkbox!important;appearance:auto!important;width:22px!important;height:22px!important;" +
+        "min-width:22px;padding:0!important;margin:1px 0 0!important;border:0!important;background:none!important;flex:none;accent-color:#1a5c38}" +
+        "label.st-cbl{display:flex;gap:8px;align-items:flex-start;padding:7px 6px;margin:2px 0;font-size:13px;border-radius:5px;cursor:pointer;border:1px solid #e3e3e3}" +
+        "label.st-cbl.on{background:#e3f1e5;border-color:#1a5c38;font-weight:bold}" +
+        "label.st-cbl .st-tk{flex:none;width:18px;color:#1a5c38;font-weight:bold}";
+      (document.head || document.documentElement).appendChild(css);
+    } catch (e) {}
+  })();
+  // one tick-box line: native checkbox plus a visible ✔, the line highlighted while ticked
+  function cbLine(cls, val, on) {
+    return "<label class=\"st-cbl" + (on ? " on" : "") + "\"><input type=\"checkbox\" class=\"st-cb " + cls + "\" value=\"" + esc(val) + "\"" + (on ? " checked" : "") +
+      "><span class=\"st-tk\">" + (on ? "✔" : "") + "</span><span>" + esc(val) + "</span></label>";
+  }
+  function cbWire(root, sel, after) {
+    var bx = root.querySelectorAll(sel);
+    for (var i = 0; i < bx.length; i++) (function (b) {
+      b.addEventListener("change", function () {
+        var l = b.closest("label"); if (l) { l.classList.toggle("on", b.checked); var t = l.querySelector(".st-tk"); if (t) t.textContent = b.checked ? "✔" : ""; }
+        if (after) after();
+      });
+    })(bx[i]);
+  }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
@@ -176,9 +201,11 @@
     var cust = custName(), site = siteName();
     var ent = cust ? siteEntry(cust, site) : null;
     var key = ent ? rno + "|" + ent.siteCode : "";
+    // no register customer (e.g. "start new report" just cleared the form): always clear up. The old
+    // early return skipped this when the report number changed at the same moment (Larry, 26/11/2026).
+    if (!ent) { S.key = ""; if (S.reg || S.st || g("st-panel") || document.querySelector(".st-carpick")) deactivate(); return; }
     if (key === S.key && !forceReload) return;
     S.key = key;
-    if (!ent) { deactivate(); return; }
     var cached = lsGet(LS_REG + ent.siteCode);
     S.reg = cached && cached.devices && cached.devices.length ? cached : null;
     loadState();
@@ -205,7 +232,8 @@
   function deactivate() {
     S.reg = null; S.st = null;
     var p = g("st-panel"); if (p && p.parentNode) p.parentNode.removeChild(p);
-    unlockOnSite(); clearCarCells(); dropQuoteRows();
+    unlockOnSite(); clearCarCells(); dropQuoteRows(); fuFieldsFree();
+    ["st-car", "st-fu-modal", "st-res", "st-ns", "st-redo", "st-scan-modal"].forEach(function (id) { var m = g(id); if (m) m.classList.remove("show"); });
   }
 
   // ── section 4 "On site" from the register ──
@@ -397,7 +425,7 @@
       fld("Correction actioned <span style=\"font-weight:normal;color:#666\">(tick all that apply)</span>", "<div class=\"st-f-cor\" style=\"border:1px solid #ccc;border-radius:4px;padding:4px 6px;background:#fff\"></div>") +
       fld("Status", sel("st-f-st", ["Select..."].concat(fuOptions(c)), f.status)) +
       "<div style=\"font-size:11px;color:#666;margin:-4px 0 6px\">" + (FU_SCHEDULED[c.pestType]
-        ? "Clear three visits in a row to finish this CAR" + (c.pestType === "Rodents" ? " (rodents then get one final visit)" : "") + ". In progress books three more visits."
+        ? "Clear three visits in a row to finish this CAR" + (c.pestType === "Rodents" ? " (rodents then get one final visit)" : "") + ". In progress: this visit is logged on this CAR and more visits are added after the last one booked."
         : "Choose Concluded (or Clear) once the fault is sorted out; In progress keeps it open for the next service.") + "</div>" +
       "<div class=\"st-f-err\" style=\"color:#b00020;font-size:12px;min-height:14px\"></div>" +
       "<div class=\"modal-btns\" style=\"flex-wrap:wrap\"><button class=\"modal-btn cancel st-x\">Cancel</button>" +
@@ -409,10 +437,9 @@
       var opts = pest && pest.obs[ob] ? pest.obs[ob] : [];
       if (ob && ob === ok) { box.innerHTML = "<span style=\"color:#1a5c38;font-size:12px\">No fault found - nothing to action.</span>"; return; }
       if (opts.length === 1 && !have.length) have = [opts[0]];
-      box.innerHTML = opts.length ? opts.map(function (k) {
-        return "<label style=\"display:flex;gap:6px;align-items:flex-start;padding:4px 0;font-size:13px\"><input type=\"checkbox\" class=\"st-f-cor-o\" value=\"" + esc(k) + "\"" +
-          (have.indexOf(k) >= 0 ? " checked" : "") + " style=\"margin-top:2px;width:18px;height:18px\"> <span>" + esc(k) + "</span></label>";
-      }).join("") : "<span style=\"color:#999;font-size:12px\">Choose what you found first</span>";
+      box.innerHTML = opts.length ? opts.map(function (k) { return cbLine("st-f-cor-o", k, have.indexOf(k) >= 0); }).join("")
+                                  : "<span style=\"color:#999;font-size:12px\">Choose what you found first</span>";
+      cbWire(box, ".st-f-cor-o");
     }
     q(".st-f-ob").onchange = function () { f = Object.assign({}, f, {action: ""}); fillCor(); };
     q(".st-x").onclick = function () { closeModal(m); };
@@ -436,7 +463,30 @@
       return "<option" + (i === 0 ? " value=\"\"" : "") + (o === val ? " selected" : "") + ">" + esc(o) + "</option>";
     }).join("") + "</select>";
   }
+  function fuFieldsLocked() {
+    if (!active()) return false;
+    if (fuMode()) return true;
+    return S.st.cars.some(function (c) { return FU_SCHEDULED[c.pestType] && !closedAtCreation(c.correction); });
+  }
+  function fuFieldsSync() {
+    var fs = g("fusel"), fd = g("fudt"); if (!fs) return;
+    if (fuFieldsLocked()) {
+      if (fs.value !== "No") { fs.value = "No"; try { fs.dispatchEvent(new Event("change", {bubbles: true})); } catch (e) {} }
+      fs.disabled = true; fs.dataset.stFu = "1"; fs.style.background = "#eee";
+      if (fd) { fd.value = ""; fd.disabled = true; }
+      var n = g("st-fu-note");
+      if (!n && fs.parentNode) { n = document.createElement("div"); n.id = "st-fu-note"; n.style.cssText = "font-size:11px;color:#1a5c38;margin-top:3px";
+        n.textContent = "Not needed - the CARs book their own follow-ups."; fs.parentNode.appendChild(n); }
+    } else fuFieldsFree();
+  }
+  function fuFieldsFree() {
+    var fs = g("fusel"), fd = g("fudt"), n = g("st-fu-note");
+    if (n && n.parentNode) n.parentNode.removeChild(n);
+    if (fs && fs.dataset.stFu) { fs.disabled = false; fs.style.background = ""; delete fs.dataset.stFu; fs.value = "";
+      try { fs.dispatchEvent(new Event("change", {bubbles: true})); } catch (e) {} if (fd) fd.disabled = false; }
+  }
   function setArpt() {
+    fuFieldsSync();
     var a = g("arpt"); if (!a || !active()) return;
     a.value = String(openCarsAfter());
   }
@@ -643,12 +693,9 @@
       var opts = p && ob && CAR_TREE[p] && CAR_TREE[p].obs[ob] ? CAR_TREE[p].obs[ob] : [];
       var have = corParts(car.correction);
       if (opts.length === 1 && !have.length) have = [opts[0]];
-      c3.innerHTML = opts.length ? opts.map(function (k) {
-        return "<label style=\"display:flex;gap:6px;align-items:flex-start;padding:4px 0;font-size:13px\"><input type=\"checkbox\" class=\"st-c-cor-o\" value=\"" + esc(k) + "\"" +
-          (have.indexOf(k) >= 0 ? " checked" : "") + " style=\"margin-top:2px;width:18px;height:18px\"> <span>" + esc(k) + "</span></label>";
-      }).join("") : "<span style=\"color:#999;font-size:12px\">Choose the observation first</span>";
-      var bx = c3.querySelectorAll(".st-c-cor-o");
-      for (var i = 0; i < bx.length; i++) bx[i].onchange = wa;
+      c3.innerHTML = opts.length ? opts.map(function (k) { return cbLine("st-c-cor-o", k, have.indexOf(k) >= 0); }).join("")
+                                 : "<span style=\"color:#999;font-size:12px\">Choose the observation first</span>";
+      cbWire(c3, ".st-c-cor-o", wa);
       wa();
     }
     function corNow() {
