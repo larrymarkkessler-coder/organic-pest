@@ -76,6 +76,13 @@
     var nx = fuNext(c);
     return !!(nx && date && nx.date <= date);
   }
+  // A "Follow Up" service (Larry, 26/11/2026): the devices are not listed - only this customer's open
+  // CARs, and the technician picks the one(s) he is following up.
+  function fuMode() { var s = g("sdesc"); return !!(s && /follow/i.test(s.value || "")); }
+  function fuDone(f) { return !!(f && f.status && f.observation); }
+  function fuOkObs(c) { var t = CAR_TREE[c.pestType]; return t && t.ok ? t.ok : "Clear - no fault found"; }
+  function openCars() { return (S.reg && S.reg.openCars) || []; }
+  function carByNo(no) { var oc = openCars(); for (var i = 0; i < oc.length; i++) if (oc[i].carNo === no) return oc[i]; return null; }
   function fuClosesCar(c, f) { return !!f && (f.status === "Concluded" || (!FU_SCHEDULED[c.pestType] && f.status === "Clear")); }
   var NO_SCAN = ["Label damaged / unreadable", "Label missing", "Camera not working", "Other"];
 
@@ -288,8 +295,18 @@
     var p = panel(); if (!p) return;
     lockOnSite(); fillCarCells(); syncQuotes();
     var devs = S.reg.devices, n = devs.length, k = devs.filter(done).length;
-    var all = k === n;
-    var h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
+    var all = k === n, fm = fuMode(), h = "";
+    if (fm) {
+      var oc0 = openCars(), nf = oc0.filter(function (c) { return fuDone(S.st.followUps[c.carNo]); }).length;
+      h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
+        "<b style=\"font-size:13px;color:#1a5c38\">Follow-up visit - open CARs</b>" +
+        "<span id=\"st-count\" style=\"font-weight:bold;padding:2px 8px;border-radius:10px;background:" + (nf ? "#cfe8d4;color:#1a5c38" : "#fff3cd;color:#7a5600") + "\">" + nf + " followed up</span></div>" +
+        "<div style=\"color:#555;margin:4px 0 6px\">This is a follow-up, so the devices are not listed. Choose the CAR(s) you are following up today - tap it below, or pick it from the CAR box in section 4 (cockroaches: the CAR box in section 3) - and complete its follow-up sheet.</div>" +
+        (oc0.length ? "" : "<div style=\"color:#b00020\">This customer has no open CARs.</div>") + fuRows(oc0, true);
+      p.innerHTML = h; bindFuRows(p); setArpt();
+      return;
+    }
+    h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
       "<b style=\"font-size:13px;color:#1a5c38\">Bait stations &amp; devices</b>" +
       "<span id=\"st-count\" style=\"font-weight:bold;padding:2px 8px;border-radius:10px;background:" + (all ? "#cfe8d4;color:#1a5c38" : "#fff3cd;color:#7a5600") + "\">" + k + " of " + n + " done</span></div>" +
       "<div style=\"color:#555;margin:4px 0 6px\">Service each device, then scan its label and choose OK or Fault. Every device must be done before the report can be submitted.</div>" +
@@ -320,26 +337,8 @@
           "</span><button type=\"button\" class=\"st-editcar\" data-lid=\"" + esc(c.localId) + "\" style=\"font-size:11px\">Open</button></div>";
       });
     }
-    var oc = (S.reg.openCars || []);
-    if (oc.length) {
-      var today = g("svcd") ? g("svcd").value : "";
-      h += "<div style=\"margin-top:10px;font-weight:bold;color:#b00020\">Open CARs - follow-ups</div>";
-      oc.forEach(function (c) {
-        var f = S.st.followUps[c.carNo] || {}, due = fuDue(c, today), nx = fuNext(c), vn = (+c.visits || 0) + 1;
-        var pest = CAR_TREE[c.pestType], obsOpts = ["Select..."].concat(pest && pest.ok ? [pest.ok] : ["Clear - no fault found"], pest ? Object.keys(pest.obs) : []);
-        h += "<div class=\"st-fu\" data-car=\"" + esc(c.carNo) + "\" style=\"border-top:1px solid #dbe9e0;padding:6px 0\">" +
-          "<div><b>" + esc(c.carNo) + "</b> " + esc(String(c.raised || "").split("-").reverse().join("/")) + (c.deviceId ? " &middot; " + esc(c.deviceId) : "") + " &middot; " + esc(c.observation) +
-          "<div style=\"color:#666;font-size:11px\">" + esc(c.correction) + (c.location ? " &middot; " + esc(c.location) : "") + "</div>" +
-          "<div class=\"st-fu-when\" style=\"font-size:11px;color:" + (due ? "#b00020" : "#666") + "\">" +
-          (FU_SCHEDULED[c.pestType] ? "Follow-up visit No. " + vn + (nx ? (nx.n === "F" ? " (final)" : "") + " planned " + esc(nx.date.split("-").reverse().join("/")) : "")
-                                    : "Checked at the next monthly service - visit No. " + vn) +
-          (+c.clears ? " &middot; " + (+c.clears) + " clear in a row" : "") + (due ? " &middot; <b>due - record it</b>" : " &middot; not due today (record it only if you checked it)") + "</div></div>" +
-          "<div style=\"display:grid;grid-template-columns:1fr;gap:4px;margin-top:4px\">" +
-          sel("st-fu-ob", obsOpts, f.observation) +
-          "<input type=\"text\" class=\"st-fu-ac\" placeholder=\"Action taken at this follow-up\" value=\"" + esc(f.action || "") + "\" style=\"font-size:12px;box-sizing:border-box;width:100%\">" +
-          sel("st-fu-st", ["Status..."].concat(fuOptions(c)), f.status) + "</div></div>";
-      });
-    }
+    var oc = openCars();
+    if (oc.length) h += "<div style=\"margin-top:10px;font-weight:bold;color:#b00020\">Open CARs - follow-ups</div>" + fuRows(oc, false);
     p.innerHTML = h;
     g("st-scan").onclick = function () { scanOpen(onCode); };
     g("st-site-car").onclick = function () { carForm(null, {}); };
@@ -353,19 +352,84 @@
     })(rows[i]);
     var ec = p.querySelectorAll(".st-editcar");
     for (var j = 0; j < ec.length; j++) (function (b) { b.onclick = function () { var c = carByLocal(b.getAttribute("data-lid")); if (c) carForm(null, c); }; })(ec[j]);
-    var fus = p.querySelectorAll(".st-fu");
-    for (var q = 0; q < fus.length; q++) (function (div) {
-      var no = div.getAttribute("data-car");
-      function upd() {
-        var st = div.querySelector(".st-fu-st").value, ob = div.querySelector(".st-fu-ob").value, ac = div.querySelector(".st-fu-ac").value.trim();
-        var f = {status: FU_STATUS.indexOf(st) >= 0 ? st : "", observation: ob && ob !== "Select..." ? ob : "", action: ac};
-        if (f.status || f.observation || f.action) S.st.followUps[no] = f; else delete S.st.followUps[no];
-        saveState(); setArpt();
-      }
-      div.querySelector(".st-fu-st").onchange = upd; div.querySelector(".st-fu-ob").onchange = upd;
-      div.querySelector(".st-fu-ac").oninput = upd;
-    })(fus[q]);
+    bindFuRows(p);
     setArpt();
+  }
+  // one line per open CAR: when it is planned, and either "Follow up" or what was recorded
+  function fuRows(oc, fm) {
+    var today = g("svcd") ? g("svcd").value : "", h = "";
+    oc.forEach(function (c) {
+      var f = S.st.followUps[c.carNo], due = fuDue(c, today), nx = fuNext(c), vn = (+c.visits || 0) + 1;
+      h += "<div class=\"st-fu\" data-car=\"" + esc(c.carNo) + "\" style=\"border-top:1px solid #dbe9e0;padding:6px 0;display:flex;justify-content:space-between;gap:8px;align-items:flex-start\">" +
+        "<div><b>" + esc(c.carNo) + "</b> " + esc(String(c.raised || "").split("-").reverse().join("/")) + (c.deviceId ? " &middot; " + esc(c.deviceId) : "") + " &middot; " + esc(c.observation) +
+        "<div style=\"color:#666;font-size:11px\">" + esc(c.correction) + (c.location ? " &middot; " + esc(c.location) : "") + "</div>" +
+        "<div class=\"st-fu-when\" style=\"font-size:11px;color:" + (due ? "#b00020" : "#666") + "\">" +
+        (FU_SCHEDULED[c.pestType] ? "Follow-up visit No. " + vn + (nx ? (nx.n === "F" ? " (final)" : "") + " planned " + esc(nx.date.split("-").reverse().join("/")) : "")
+                                  : "Checked at the next monthly service - visit No. " + vn) +
+        (+c.clears ? " &middot; " + (+c.clears) + " clear in a row" : "") +
+        (fuDone(f) ? "" : due ? (fm ? " &middot; <b>due</b>" : " &middot; <b>due - record it</b>") : (fm ? "" : " &middot; not due today")) + "</div>" +
+        (fuDone(f) ? "<div class=\"st-fu-got\" style=\"font-size:12px;color:#1a5c38;margin-top:2px\">✔ " + esc(f.status) + " - " + esc(f.observation) + (f.action ? " &middot; " + esc(f.action) : "") + "</div>" : "") +
+        "</div><button type=\"button\" class=\"st-fu-go\" style=\"flex:none;font-size:12px;font-weight:bold;border-radius:5px;padding:6px 10px;" +
+        (fuDone(f) ? "background:none;border:1px solid #1a5c38;color:#1a5c38\">Change" : "background:#1a5c38;color:#fff;border:none\">Follow up") + "</button></div>";
+    });
+    return h;
+  }
+  function bindFuRows(p) {
+    var b = p.querySelectorAll(".st-fu .st-fu-go");
+    for (var i = 0; i < b.length; i++) (function (btn) {
+      btn.onclick = function () { var c = carByNo(btn.closest(".st-fu").getAttribute("data-car")); if (c) fuForm(c); };
+    })(b[i]);
+  }
+  // the follow-up sheet: what was found and the corrections actioned use the same lists as the CAR itself
+  function fuForm(c) {
+    var f = S.st.followUps[c.carNo] || {}, nx = fuNext(c), vn = (+c.visits || 0) + 1, pest = CAR_TREE[c.pestType], ok = fuOkObs(c);
+    var m = modal("st-fu-modal", "CAR follow-up - " + c.carNo); if (!m) return;
+    var body = m.querySelector(".pm-body");
+    var dd = function (x) { return String(x || "").split("-").reverse().join("/"); };
+    body.innerHTML =
+      "<div style=\"font-size:12px;background:#f0f4f1;border-radius:6px;padding:6px;margin-bottom:8px;line-height:1.5\">" +
+      "<b>" + esc(c.carNo) + "</b> raised " + esc(dd(c.raised)) + " on report " + esc(c.reportNo || "") +
+      "<br>" + esc(c.pestType) + (c.deviceId ? " &middot; device <b>" + esc(c.deviceId) + "</b>" : "") + (c.location ? " &middot; " + esc(c.location) : "") +
+      "<br>Found: " + esc(c.observation) + "<br>Action then: " + esc(c.correction) +
+      "<br><b>Follow-up visit No. " + vn + (nx && nx.n === "F" ? " (final)" : "") + "</b>" + (nx ? " - planned " + esc(dd(nx.date)) : "") +
+      (+c.clears ? " &middot; " + (+c.clears) + " clear in a row so far" : "") + "</div>" +
+      fld("What you found at this follow-up", sel("st-f-ob", ["Select...", ok].concat(pest ? Object.keys(pest.obs) : []), f.observation)) +
+      fld("Correction actioned <span style=\"font-weight:normal;color:#666\">(tick all that apply)</span>", "<div class=\"st-f-cor\" style=\"border:1px solid #ccc;border-radius:4px;padding:4px 6px;background:#fff\"></div>") +
+      fld("Status", sel("st-f-st", ["Select..."].concat(fuOptions(c)), f.status)) +
+      "<div style=\"font-size:11px;color:#666;margin:-4px 0 6px\">" + (FU_SCHEDULED[c.pestType]
+        ? "Clear three visits in a row to finish this CAR" + (c.pestType === "Rodents" ? " (rodents then get one final visit)" : "") + ". In progress books three more visits."
+        : "Choose Concluded (or Clear) once the fault is sorted out; In progress keeps it open for the next service.") + "</div>" +
+      "<div class=\"st-f-err\" style=\"color:#b00020;font-size:12px;min-height:14px\"></div>" +
+      "<div class=\"modal-btns\" style=\"flex-wrap:wrap\"><button class=\"modal-btn cancel st-x\">Cancel</button>" +
+      (fuDone(f) ? "<button class=\"modal-btn cancel st-rm\" style=\"color:#b00020\">Not followed up today</button>" : "") +
+      "<button class=\"modal-btn save st-save\">Save follow-up</button></div>";
+    var q = function (x) { return body.querySelector(x); };
+    function fillCor() {
+      var ob = q(".st-f-ob").value, box = q(".st-f-cor"), have = corParts(f.action);
+      var opts = pest && pest.obs[ob] ? pest.obs[ob] : [];
+      if (ob && ob === ok) { box.innerHTML = "<span style=\"color:#1a5c38;font-size:12px\">No fault found - nothing to action.</span>"; return; }
+      if (opts.length === 1 && !have.length) have = [opts[0]];
+      box.innerHTML = opts.length ? opts.map(function (k) {
+        return "<label style=\"display:flex;gap:6px;align-items:flex-start;padding:4px 0;font-size:13px\"><input type=\"checkbox\" class=\"st-f-cor-o\" value=\"" + esc(k) + "\"" +
+          (have.indexOf(k) >= 0 ? " checked" : "") + " style=\"margin-top:2px;width:18px;height:18px\"> <span>" + esc(k) + "</span></label>";
+      }).join("") : "<span style=\"color:#999;font-size:12px\">Choose what you found first</span>";
+    }
+    q(".st-f-ob").onchange = function () { f = Object.assign({}, f, {action: ""}); fillCor(); };
+    q(".st-x").onclick = function () { closeModal(m); };
+    if (q(".st-rm")) q(".st-rm").onclick = function () { delete S.st.followUps[c.carNo]; saveState(); closeModal(m); render(); };
+    q(".st-save").onclick = function () {
+      var ob = q(".st-f-ob").value, st = q(".st-f-st").value;
+      var cor = Array.prototype.slice.call(body.querySelectorAll(".st-f-cor-o")).filter(function (x) { return x.checked; }).map(function (x) { return x.value; });
+      var miss = [];
+      if (!ob || ob === "Select...") miss.push("what you found");
+      else if (ob !== ok && !cor.length) miss.push("the correction actioned");
+      if (FU_STATUS.indexOf(st) < 0) miss.push("the status");
+      if (miss.length) { q(".st-f-err").textContent = "Still needed: " + miss.join(", ") + "."; return; }
+      S.st.followUps[c.carNo] = {observation: ob, action: cor.join(COR_SEP), status: st};
+      saveState(); closeModal(m); render();
+    };
+    fillCor();
+    m.classList.add("show");
   }
   function sel(cls, opts, val) {
     return "<select class=\"" + cls + "\" style=\"font-size:12px;max-width:100%\">" + opts.map(function (o, i) {
@@ -692,7 +756,13 @@
       if (name === "Moth Traps") out.moth = rows[i].querySelector(".dcar");
     }
     out.ilt = document.querySelector("#ilt-tbody tr.ilt-device-row .dcar");
+    out.cr = document.querySelector(".area-car");   // section 3
     return out;
+  }
+  function carBucket(c) {
+    if (c.pestType === "Cockroaches") return "cr";
+    var d = c.deviceId ? devById(c.deviceId) : null;
+    return d ? bucketOf(d) : "";
   }
   // The PDF's CAR column is narrow and its widths must not change (the bait station
   // check and the Site Report read that table), so the cell holds the short numbers:
@@ -701,11 +771,10 @@
     return list.map(function (n) { var m = /^CAR-0*(\d+)$/.exec(String(n)); return m ? m[1] : "?"; }).join(",");
   }
   function fillCarCells() {
-    var cells = carCells(), by = {ext: [], int: [], ilt: [], moth: []};
-    S.st.cars.forEach(function (c) {
-      var d = c.deviceId ? devById(c.deviceId) : null, b = d ? bucketOf(d) : "";
-      if (b) by[b].push(c.carNo || "pending");
-    });
+    var cells = carCells(), by = {ext: [], int: [], ilt: [], moth: [], cr: []};
+    S.st.cars.forEach(function (c) { var b = carBucket(c); if (b) by[b].push(c.carNo || "pending"); });
+    openCars().forEach(function (c) { var b = carBucket(c); if (b && fuDone(S.st.followUps[c.carNo])) by[b].push(c.carNo); });
+    syncPickers(cells);
     Object.keys(by).forEach(function (b) {
       var el = cells[b]; if (!el) return;
       var v = carText(by[b]);
@@ -716,15 +785,44 @@
       }
       if (v) {
         el.dataset.stCar = "1"; el.readOnly = true; el.style.background = "#e8f3ec";
-        el.style.width = Math.max(38, v.length * 7 + 6) + "px";
+        if (el.classList.contains("dcar")) el.style.width = Math.max(38, v.length * 7 + 6) + "px";
         el.title = "CARs raised on these devices: " + by[b].join(", ");
-      } else { delete el.dataset.stCar; el.readOnly = false; el.style.background = ""; el.style.width = "38px"; }
+      } else { delete el.dataset.stCar; el.readOnly = false; el.style.background = ""; if (el.classList.contains("dcar")) el.style.width = "38px"; }
+    });
+  }
+  // Each CAR box becomes a list of the open CARs for that kind of equipment (Larry, 26/11/2026):
+  // picking one opens its follow-up sheet. The platform's own box stays underneath (hidden) and
+  // holds the CAR numbers, so the report and the PDF read it exactly as before.
+  function syncPickers(cells) {
+    cells = cells || carCells();
+    var oc = openCars();
+    Object.keys(cells).forEach(function (b) {
+      var el = cells[b]; if (!el || !el.parentNode) return;
+      var mine = oc.filter(function (c) { return carBucket(c) === b; });
+      var pk = el.parentNode.querySelector(".st-carpick");
+      if (!mine.length) { if (pk) pk.parentNode.removeChild(pk); el.style.display = ""; return; }
+      if (!pk) {
+        pk = document.createElement("select"); pk.className = "st-carpick"; pk.setAttribute("data-b", b);
+        pk.style.cssText = "max-width:120px;font-size:11px;font-weight:bold;color:#b00020;border:1px solid #b00020;border-radius:4px";
+        pk.onchange = function () { var c = carByNo(pk.value); pk.value = ""; if (c) fuForm(c); };
+        el.parentNode.insertBefore(pk, el.nextSibling);
+      }
+      el.style.display = "none";
+      var today = g("svcd") ? g("svcd").value : "";
+      var html = "<option value=\"\">" + esc(el.value ? el.value + " ▾" : "CAR ▾") + "</option>" + mine.map(function (c) {
+        var f = S.st.followUps[c.carNo];
+        return "<option value=\"" + esc(c.carNo) + "\">" + (fuDone(f) ? "✔ " : "") + esc(c.carNo) + (c.deviceId ? " " + esc(c.deviceId) : "") +
+               (fuDone(f) ? " - " + esc(f.status) : fuDue(c, today) ? " - due" : "") + "</option>";
+      }).join("");
+      if (pk.getAttribute("data-h") !== html) { pk.innerHTML = html; pk.setAttribute("data-h", html); pk.value = ""; }
     });
   }
   function clearCarCells() {
-    var els = document.querySelectorAll(".dcar[data-st-car]");
+    var pks = document.querySelectorAll(".st-carpick");
+    for (var j = 0; j < pks.length; j++) { var inp = pks[j].previousSibling; if (inp && inp.style) inp.style.display = ""; pks[j].parentNode.removeChild(pks[j]); }
+    var els = document.querySelectorAll(".dcar[data-st-car], .area-car[data-st-car]");
     for (var i = 0; i < els.length; i++) {
-      els[i].value = ""; els[i].readOnly = false; els[i].style.background = ""; els[i].style.width = "38px";
+      els[i].value = ""; els[i].readOnly = false; els[i].style.background = ""; if (els[i].classList.contains("dcar")) els[i].style.width = "38px";
       delete els[i].dataset.stCar;
     }
   }
@@ -786,7 +884,14 @@
 
   // ── what index.html asks for ──
   function errors() {
-    if (!active() || !devicesServiced()) return [];
+    if (!active()) return [];
+    if (fuMode()) {
+      var oc = openCars(), got = oc.filter(function (c) { return fuDone(S.st.followUps[c.carNo]); });
+      var fo = [];
+      if (oc.length && !got.length) fo.push("Follow-up visit: choose the CAR(s) you followed up (section 4) and complete the follow-up sheet.");
+      return fo.concat(quoteErrors());
+    }
+    if (!devicesServiced()) return [];
     var out = [], left = S.reg.devices.filter(function (d) { return !done(d); });
     if (left.length) out.push("Bait stations & devices: " + left.length + " of " + S.reg.devices.length +
       " not done yet - " + left.map(function (d) { return d.id; }).join(", ") + ". Scan each one (or mark it missing).");
@@ -794,10 +899,8 @@
     var day = g("svcd") ? g("svcd").value : "";
     ((S.reg && S.reg.openCars) || []).forEach(function (c) {
       var f = S.st.followUps[c.carNo] || {};
-      if (fuDue(c, day) && (!f.status || !f.observation))
-        out.push("Follow-up of " + c.carNo + (c.deviceId ? " (device " + c.deviceId + ")" : "") + " is due: choose what you found and the status.");
-      else if (f.status === "In progress" && !f.action)
-        out.push("Follow-up of " + c.carNo + ": say what action you took.");
+      if (fuDue(c, day) && !fuDone(f))
+        out.push("Follow-up of " + c.carNo + (c.deviceId ? " (device " + c.deviceId + ")" : "") + " is due: tap Follow up and complete its sheet.");
     });
     return out.concat(quoteErrors());
   }
@@ -823,9 +926,10 @@
       return {carNo: no, date: date, visitNo: (+c0.visits || 0) + 1, status: f.status || "", observation: f.observation || "",
               action: f.action || "", pestType: c0.pestType || "", deviceId: c0.deviceId || "", carObservation: c0.observation || "",
               raised: c0.raised || ""};
-    }).filter(function (x) { return x && (x.status || x.observation || x.action); });
-    return {siteCode: S.reg.siteCode, onSite: S.reg.devices.length,
-            done: S.reg.devices.filter(done).length, devices: devs, cars: cars, followUps: fus,
+    }).filter(function (x) { return x && x.status && x.observation; });
+    var fm = fuMode();
+    return {siteCode: S.reg.siteCode, onSite: S.reg.devices.length, followUpVisit: fm,
+            done: fm ? 0 : S.reg.devices.filter(done).length, devices: fm ? [] : devs, cars: cars, followUps: fus,
             openAfter: openCarsAfter(), contact: (S.reg.contact && S.reg.contact.name) || ""};
   }
   // CAR photos are not kept inside the saved report on the phone: six photos filled the phone's
@@ -872,6 +976,10 @@
       var ls = doc.splitTextToSize(String(t || ""), CW);
       doc.text(ls, M, y); y += ls.length * (size ? size * 0.42 : 3.6);
     }
+    if (sc.followUpVisit) {
+      head("CAR FOLLOW-UP VISIT - " + (data.customer || "") + " - " + (data.reportNo || ""));
+      line("Follow-up visit: " + (sc.followUps || []).length + " CAR(s) followed up    Open CARs after this visit: " + (sc.openAfter || 0), true, 8.5);
+    } else {
     head("BAIT STATIONS & DEVICES - " + (data.customer || "") + " - " + (data.reportNo || ""));
     var scanned = sc.devices.filter(function (x) { return x.scanned; }).length;
     var newOpen = (sc.cars || []).filter(function (c) { return c.status === "Open"; }).length;
@@ -897,12 +1005,13 @@
       row([x.id, x.type, x.location, x.status === "ok" ? x.result : x.status === "car" ? x.result : "NOT DONE",
            x.scanned ? (x.scannedAt || "Y").slice(-5) : "No" + (x.reason ? " - " + x.reason : ""), x.carNo || (x.status === "car" ? "pending" : "")]);
     });
+    }
     if ((sc.followUps || []).length) {
       y += 3; line("Follow-ups of open CARs", true, 8.5); y += 1;
       sc.followUps.forEach(function (f) {
         line(f.carNo + (f.deviceId ? " (" + f.deviceId + ")" : "") + " raised " + String(f.raised || "").split("-").reverse().join("/") + " - " +
              (f.carObservation || "") + ".  Follow-up visit No. " + (f.visitNo || "") + ": " + (f.observation || "-") +
-             (f.action ? "; action taken: " + f.action : "") + ".  Status: " + (f.status || "-"));
+             (f.action ? "; correction actioned: " + f.action : "") + ".  Status: " + (f.status || "-"));
       });
     }
     (sc.cars || []).forEach(function (c) {
@@ -934,7 +1043,7 @@
     });
   }
 
-  window.ST = {active: active, errors: errors, payload: payload, onSaved: onSaved, pdfPages: pdfPages, lean: lean, fill: fill,
+  window.ST = {active: active, errors: errors, payload: payload, onSaved: onSaved, pdfPages: pdfPages, lean: lean, fill: fill, _fuForm: function (no) { var c = carByNo(no); if (c) fuForm(c); },
                _state: function () { return S; }, _check: check, _refreshSites: refreshSites, _onCode: onCode, CAR_TREE: CAR_TREE};
 
   // keep only the 15 newest report states on the phone
@@ -951,7 +1060,8 @@
       refreshSites(false);
       var cs = g("cs"); if (cs) cs.addEventListener("change", function () { refreshSites(false, 120000); setTimeout(check, 50); });
       var ss = g("site-sel"); if (ss) ss.addEventListener("change", function () { setTimeout(check, 50); });
-      setInterval(function () { try { check(); retryNumbers(); } catch (e) {} }, 1500);
+      var sd = g("sdesc"); if (sd) sd.addEventListener("change", function () { if (active()) render(); });
+      setInterval(function () { try { check(); retryNumbers(); if (active()) fillCarCells(); } catch (e) {} }, 1500);
       check();
     } catch (e) { console.log("stations.js start:", e && e.message); }
   }
