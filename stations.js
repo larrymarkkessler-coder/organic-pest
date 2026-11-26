@@ -180,7 +180,7 @@
   function deactivate() {
     S.reg = null; S.st = null;
     var p = g("st-panel"); if (p && p.parentNode) p.parentNode.removeChild(p);
-    unlockOnSite();
+    unlockOnSite(); clearCarCells(); dropQuoteRows();
   }
 
   // ── section 4 "On site" from the register ──
@@ -252,7 +252,14 @@
     S.st.cars.forEach(function (c) { if (!closedAtCreation(c.correction)) n++; });
     return n;
   }
-  function closedAtCreation(c) { return /(fixed|replaced|replenished)\s*$/i.test(String(c || "")) && !/\bnot\b/i.test(String(c || "")); }
+  // Several corrections can be ticked (Larry, 26/11/2026), kept as "A; B". The CAR is
+  // closed on the day only when every one of them fixed it.
+  var COR_SEP = "; ";
+  function corParts(c) { return String(c || "").split(/\s*;\s*/).filter(function (x) { return x; }); }
+  function closedAtCreation(c) {
+    var parts = corParts(c);
+    return parts.length > 0 && parts.every(function (x) { return /(fixed|replaced|replenished)\s*$/i.test(x) && !/\bnot\b/i.test(x); });
+  }
 
   function render() {
     if (!active()) {
@@ -262,7 +269,7 @@
       return;
     }
     var p = panel(); if (!p) return;
-    lockOnSite();
+    lockOnSite(); fillCarCells(); syncQuotes();
     var devs = S.reg.devices, n = devs.length, k = devs.filter(done).length;
     var all = k === n;
     var h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
@@ -522,7 +529,7 @@
       "<br>Date: " + esc(dd) + " &middot; Service report: " + esc(window.rNo || "") + (car.deviceId ? "<br>Equipment number: <b>" + esc(car.deviceId) + "</b>" : "") + "</div>" +
       fld("Pest type", sel("st-c-pest", ["Select..."].concat(PESTS), car.pestType)) +
       fld("Observation", "<select class=\"st-c-obs\" style=\"width:100%\"></select>") +
-      fld("Correction actioned", "<select class=\"st-c-cor\" style=\"width:100%\"></select>") +
+      fld("Correction actioned <span style=\"font-weight:normal;color:#666\">(tick all that apply)</span>", "<div class=\"st-c-cor\" style=\"border:1px solid #ccc;border-radius:4px;padding:4px 6px;background:#fff\"></div>") +
       "<div class=\"st-c-wa\" style=\"display:none;margin:-2px 0 8px\"></div>" +
       fld("Party responsible", sel("st-c-party", ["Select..."].concat(PARTY), car.party)) +
       fld("Location", "<input type=\"text\" class=\"st-c-loc\" style=\"width:100%;box-sizing:border-box\" value=\"" + esc(car.location) + "\">") +
@@ -543,12 +550,22 @@
     function fillCor() {
       var p = q(".st-c-pest").value, ob = q(".st-c-obs").value, c3 = q(".st-c-cor");
       var opts = p && ob && CAR_TREE[p] && CAR_TREE[p].obs[ob] ? CAR_TREE[p].obs[ob] : [];
-      c3.innerHTML = "<option value=\"\">Select...</option>" + opts.map(function (k) { return "<option" + (k === car.correction ? " selected" : "") + ">" + esc(k) + "</option>"; }).join("");
-      if (opts.length === 1 && !c3.value) c3.value = opts[0];
+      var have = corParts(car.correction);
+      if (opts.length === 1 && !have.length) have = [opts[0]];
+      c3.innerHTML = opts.length ? opts.map(function (k) {
+        return "<label style=\"display:flex;gap:6px;align-items:flex-start;padding:4px 0;font-size:13px\"><input type=\"checkbox\" class=\"st-c-cor-o\" value=\"" + esc(k) + "\"" +
+          (have.indexOf(k) >= 0 ? " checked" : "") + " style=\"margin-top:2px;width:18px;height:18px\"> <span>" + esc(k) + "</span></label>";
+      }).join("") : "<span style=\"color:#999;font-size:12px\">Choose the observation first</span>";
+      var bx = c3.querySelectorAll(".st-c-cor-o");
+      for (var i = 0; i < bx.length; i++) bx[i].onchange = wa;
       wa();
     }
+    function corNow() {
+      return Array.prototype.slice.call(body.querySelectorAll(".st-c-cor-o")).filter(function (x) { return x.checked; })
+        .map(function (x) { return x.value; }).join(COR_SEP);
+    }
     function wa() {
-      var cor = q(".st-c-cor").value, box = q(".st-c-wa");
+      var cor = corNow(), box = q(".st-c-wa");
       if (!cor || !/client|reported|customer|quote/i.test(cor)) { box.style.display = "none"; return; }
       var ct = (S.reg && S.reg.contact) || {};
       box.style.display = "block";
@@ -575,7 +592,6 @@
     function gotPhoto(rec) { if (!rec) return; S.photos[rec.id] = rec.data; car.photoId = rec.id; thumb(); }
     q(".st-c-pest").onchange = function () { car.observation = ""; car.correction = ""; fillObs(); };
     q(".st-c-obs").onchange = function () { car.correction = ""; fillCor(); };
-    q(".st-c-cor").onchange = wa;
     q(".st-c-cam").onclick = function () {
       if (window.camOpen) { window.camOpen(function (rec) { gotPhoto(rec); }, function () { if (window.photoFixRequest) window.photoFixRequest(); q(".st-c-file").click(); }); toTop("cam-modal"); }
       else q(".st-c-file").click();
@@ -588,7 +604,7 @@
     };
     q(".st-x").onclick = function () { closeModal(m); };
     q(".st-save").onclick = function () {
-      car.pestType = q(".st-c-pest").value; car.observation = q(".st-c-obs").value; car.correction = q(".st-c-cor").value;
+      car.pestType = q(".st-c-pest").value; car.observation = q(".st-c-obs").value; car.correction = corNow();
       car.party = q(".st-c-party").value; car.location = q(".st-c-loc").value.trim(); car.details = q(".st-c-det").value.trim();
       var miss = [];
       if (!car.pestType) miss.push("pest type"); if (!car.observation) miss.push("observation");
@@ -613,18 +629,130 @@
     return "<div style=\"margin-bottom:8px\"><div style=\"font-size:11px;font-weight:bold;color:#1a5c38;margin-bottom:2px\">" + label + "</div>" + html + "</div>";
   }
   // CAR number from the sheet; with no signal it is given when the report syncs.
+  // One request per CAR at a time: the 1.5 s retry used to ask again while the
+  // save's own request was still out, so every CAR used two numbers (trial 26/11/2026).
+  var _asking = {};
   function reserve(car) {
-    if (!gas()) return;
+    if (!gas() || _asking[car.localId]) return;
+    _asking[car.localId] = 1;
     var fd = new FormData(); fd.append("payload", JSON.stringify({action: "reserveCarNo"}));
     fetch(gas(), {method: "POST", body: fd}).then(function (r) { return r.json(); }).then(function (res) {
+      delete _asking[car.localId];
       if (!res || res.status !== "ok" || !/^CAR-\d+$/.test(res.carNo || "")) return;
       var c = carByLocal(car.localId); if (!c || c.carNo) return;
       c.carNo = res.carNo; saveState(); render();
-    }).catch(function () {});
+    }).catch(function () { setTimeout(function () { delete _asking[car.localId]; }, 20000); });
   }
   function retryNumbers() {
     if (!active()) return;
-    S.st.cars.forEach(function (c) { if (!c.carNo && !c._asking) { c._asking = 1; reserve(c); setTimeout(function () { delete c._asking; }, 20000); } });
+    S.st.cars.forEach(function (c) { if (!c.carNo) reserve(c); });
+  }
+
+  // ── section 4 "CAR" cells get the CAR numbers raised on those devices (Larry, 26/11/2026) ──
+  function bucketOf(d) {
+    var t = String(d.type || "").toLowerCase(), p = pestOf(t);
+    if (/bait/.test(t)) return /exterior/.test(t) ? "ext" : "int";
+    if (p === "Flies") return "ilt";
+    if (p === "Moths") return "moth";
+    return "";
+  }
+  function carCells() {
+    var out = {}, rows = document.querySelectorAll("#dbody tr");
+    for (var i = 0; i < rows.length; i++) {
+      var name = rows[i].cells[0] ? rows[i].cells[0].textContent.trim() : "";
+      if (name === "Tamper Proof Exterior Rodent Bait Stations") out.ext = rows[i].querySelector(".dcar");
+      if (name === "Tamper Proof Interior Rodent Bait Stations") out.int = rows[i].querySelector(".dcar");
+      if (name === "Moth Traps") out.moth = rows[i].querySelector(".dcar");
+    }
+    out.ilt = document.querySelector("#ilt-tbody tr.ilt-device-row .dcar");
+    return out;
+  }
+  function carText(list) {
+    if (!list.length) return "";
+    if (list.length === 1) return list[0];
+    return list.map(function (n) { return String(n).replace(/^CAR-/, ""); }).join(",");
+  }
+  function fillCarCells() {
+    var cells = carCells(), by = {ext: [], int: [], ilt: [], moth: []};
+    S.st.cars.forEach(function (c) {
+      var d = c.deviceId ? devById(c.deviceId) : null, b = d ? bucketOf(d) : "";
+      if (b) by[b].push(c.carNo || "pending");
+    });
+    Object.keys(by).forEach(function (b) {
+      var el = cells[b]; if (!el) return;
+      var v = carText(by[b]);
+      if (!v && !el.dataset.stCar) return;            // never touch a cell the technician filled himself
+      if (el.value !== v) {
+        el.value = v;
+        try { el.dispatchEvent(new Event("input", {bubbles: true})); } catch (e) {}
+      }
+      if (v) {
+        el.dataset.stCar = "1"; el.readOnly = true; el.style.background = "#e8f3ec";
+        el.style.width = Math.max(38, v.length * 7 + 6) + "px"; el.title = "CARs raised on these devices";
+      } else { delete el.dataset.stCar; el.readOnly = false; el.style.background = ""; el.style.width = "38px"; }
+    });
+  }
+  function clearCarCells() {
+    var els = document.querySelectorAll(".dcar[data-st-car]");
+    for (var i = 0; i < els.length; i++) {
+      els[i].value = ""; els[i].readOnly = false; els[i].style.background = ""; els[i].style.width = "38px";
+      delete els[i].dataset.stCar;
+    }
+  }
+
+  // ── a "quoted" correction puts a line in section 7, so the quote request goes to the
+  //    office with the report and can't be forgotten (Larry, 26/11/2026) ──
+  function isQuoteCar(c) { return corParts(c.correction).some(function (x) { return /quot/i.test(x); }); }
+  function quoteTail(c) { return [c.deviceId, c.location].filter(function (x) { return x; }).join(" "); }
+  function quoteArea(c) { return (c.carNo || "CAR") + " " + quoteTail(c); }
+  function quoteRowFor(c) {
+    var rows = document.querySelectorAll("#quote-body tr"), tail = quoteTail(c);
+    for (var i = 0; i < rows.length; i++) if (rows[i].getAttribute("data-st-car") === c.localId) return rows[i];
+    for (var j = 0; j < rows.length; j++) {          // a draft restore brings the row back without its tag
+      var a = rows[j].querySelector(".quote-area"), v = a ? a.value : "";
+      if (/^CAR/.test(v) && v.slice(-tail.length) === tail && !rows[j].getAttribute("data-st-car")) {
+        rows[j].setAttribute("data-st-car", c.localId); return rows[j];
+      }
+    }
+    return null;
+  }
+  function syncQuotes() {
+    if (!g("quote-body") || !window.addQuoteRow) return;
+    var want = {};
+    S.st.cars.forEach(function (c) {
+      if (!isQuoteCar(c)) return;
+      want[c.localId] = 1;
+      var r = quoteRowFor(c);
+      if (!r) {
+        window.addQuoteRow(); r = g("quote-body").lastElementChild; if (!r) return;
+        r.setAttribute("data-st-car", c.localId);
+        var cat = r.querySelector(".quote-cat");
+        if (cat && (window.QUOTE_CATS || []).indexOf(c.pestType) >= 0) {
+          cat.value = c.pestType;
+          try { cat.dispatchEvent(new Event("change", {bubbles: true})); } catch (e) {}
+        }
+        var q = r.querySelector("input[type=number]"); if (q && !q.value) q.value = "1";
+      }
+      var a = r.querySelector(".quote-area");
+      if (a && a.value !== quoteArea(c)) a.value = quoteArea(c);
+      r.style.background = "#fff8e1";
+    });
+    var rows = document.querySelectorAll("#quote-body tr[data-st-car]");
+    for (var i = 0; i < rows.length; i++) if (!want[rows[i].getAttribute("data-st-car")]) rows[i].parentNode.removeChild(rows[i]);
+  }
+  function dropQuoteRows() {
+    var rows = document.querySelectorAll("#quote-body tr[data-st-car]");
+    for (var i = 0; i < rows.length; i++) rows[i].parentNode.removeChild(rows[i]);
+  }
+  function quoteErrors() {
+    var out = [];
+    S.st.cars.forEach(function (c) {
+      if (!isQuoteCar(c)) return;
+      var r = quoteRowFor(c), it = r ? r.querySelector(".quote-item") : null;
+      if (!it || !it.value || it.value === "Select item")
+        out.push("Section 7: choose the item to quote for " + (c.carNo || "the CAR") + (c.deviceId ? " (device " + c.deviceId + ")" : "") + ".");
+    });
+    return out;
   }
 
   // ── what index.html asks for ──
@@ -634,7 +762,7 @@
     if (left.length) out.push("Bait stations & devices: " + left.length + " of " + S.reg.devices.length +
       " not done yet - " + left.map(function (d) { return d.id; }).join(", ") + ". Scan each one (or mark it missing).");
     S.st.cars.forEach(function (c) { if (!c.photoId || !S.photos[c.photoId]) out.push((c.carNo || "A CAR") + " has no photo."); });
-    return out;
+    return out.concat(quoteErrors());
   }
   function payload() {
     if (!active()) return null;
@@ -731,7 +859,11 @@
       });
       if (c.photo) {
         y += 2;
-        var pw = CW * 0.7, ph = Math.min(H - y - 30, pw * 0.75);
+        // keep the photo's own shape (a portrait phone photo was squashed into 4:3 - trial 26/11/2026)
+        var maxW = CW * 0.7, maxH = Math.max(40, H - y - 30), ratio = 0.75;
+        try { var ip = doc.getImageProperties(c.photo); if (ip && ip.width && ip.height) ratio = ip.height / ip.width; } catch (e) {}
+        var pw = maxW, ph = pw * ratio;
+        if (ph > maxH) { ph = maxH; pw = ph / ratio; }
         try { doc.addImage(c.photo, "JPEG", M, y, pw, ph, undefined, "FAST"); } catch (e) {}
         doc.setDrawColor(221, 221, 216); doc.rect(M, y, pw, ph); y += ph + 4;
       }

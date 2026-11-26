@@ -3452,7 +3452,7 @@ rows2.forEach(function(row,ri){var bg=ri%2===0?W3:GL;doc.setFillColor(bg[0],bg[1
   tbl(["Area","CAR","Pests","Act.","Material","Qty","Unit","Method","Reg.No."],[0.16,0.06,0.06,0.06,0.37,0.07,0.07,0.07,0.08],ar,1);
   sH("4.  PEST DEVICES");
   var dr=[];(data.devices||[]).forEach(function(d2){var qos=parseFloat(d2.qty_on_site||0);var qus=parseFloat(d2.qty_used||0);var hasData=qos>0||qus>0||(d2.material&&d2.material!=="Select material"&&d2.material!=="")||(d2.activity&&d2.activity!=="--");if(hasData)dr.push([(d2.device||"").substring(0,35),d2.qty_on_site,d2.car,d2.pests,d2.activity,(d2.material||"").substring(0,48),d2.qty_used,d2.unit,d2.method,d2.lnumber||""]);});
-  tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],[0.18,0.05,0.04,0.05,0.05,0.37,0.06,0.06,0.06,0.08],dr,1);
+  tbl(["Device","On site","CAR","Pests","Act.","Material","Qty","Unit","Meth.","Reg.No."],data.stationCheck?[0.13,0.05,0.09,0.05,0.05,0.37,0.06,0.06,0.06,0.08]:[0.18,0.05,0.04,0.05,0.05,0.37,0.06,0.06,0.06,0.08],dr,1);
   var trapRows=[];(data.devices||[]).forEach(function(d3){
     if(d3.activity_traps&&d3.activity_traps.length)
       trapRows.push([d3.device||"",d3.activity_traps.join(", ")]);
@@ -3949,6 +3949,10 @@ function loadPlannerFromSheets(){
           dueMonths:j.dueMonths||""
         };
       });
+      // Follow-ups auto-crossed by the report that booked them are worked out again (26/11/2026)
+      try{var _fuReset=false;plannerJobs.forEach(function(j){if(!/^follow/i.test(String(j.notes||"").trim()))return;
+        var k=j.techKey+"||"+j.date+"||"+j.customer;if(jobSt[k]==="auto"){delete jobSt[k];_fuReset=true;}});
+        if(_fuReset)localStorage.setItem("org_jobst",JSON.stringify(jobSt));}catch(e){}
       loadRpts().forEach(function(r){markPlannerDoneNew(r);});
       buildTechFilters();renderCalendar();updStats();
       console.log("Planner loaded live from Sheets: "+plannerJobs.length+" jobs");
@@ -4096,6 +4100,9 @@ function markPlannerDoneNew(data){
   plannerJobs.forEach(function(job){
     if(job.techKey!==data.techKey)return;
     if(job.date<rMinus1||job.date>rPlus3)return;
+    // A follow-up is crossed off only by a report on or after its own date - the
+    // report that booked it must not cross it off (Larry, 26/11/2026)
+    if(/^follow/i.test(String(job.notes||"").trim())&&job.date>reportDate)return;
     var jc=String(job.customer||"").toLowerCase();
     var matched=false;
 
@@ -5653,4 +5660,4 @@ g("cs").addEventListener("change",function(){
 }
 window.addEventListener("load",init);
 
-</script><script src="stations.js?v=2"></script></body></html>
+</script><script src="stations.js?v=3"></script></body></html>
