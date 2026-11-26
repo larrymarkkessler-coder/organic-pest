@@ -78,6 +78,22 @@
   }
   // A "Follow Up" service (Larry, 26/11/2026): the devices are not listed - only this customer's open
   // CARs, and the technician picks the one(s) he is following up.
+  // TRIAL ONLY (Larry, 26/11/2026): on the test site each follow-up is recorded as if it was done on its
+  // planned date, so the CARs can be taken to their conclusion without waiting. The office applies the
+  // normal rules to that date. No other customer ever sees this.
+  var TRIAL_SITES = {"LST-TEST": 1};
+  function trialSite() { return !!(S.reg && TRIAL_SITES[S.reg.siteCode]); }
+  function trialOn() { return trialSite() && S.st && S.st.trialDates !== false; }
+  function fuVisitDate(c) {
+    var day = g("svcd") ? g("svcd").value : "", nx = fuNext(c);
+    return trialOn() && nx && FU_SCHEDULED[c.pestType] ? nx.date : day;
+  }
+  function trialBox() {
+    if (!trialSite()) return "";
+    return "<label class=\"st-cbl" + (trialOn() ? " on" : "") + "\" style=\"border-color:#b07a00;background:" + (trialOn() ? "#fff3cd" : "#fff") + ";font-weight:normal\">" +
+      "<input type=\"checkbox\" class=\"st-cb st-trial\"" + (trialOn() ? " checked" : "") + "><span class=\"st-tk\">" + (trialOn() ? "✔" : "") + "</span>" +
+      "<span><b>TRIAL ONLY (test site):</b> record each follow-up as done on its planned date, so the CARs can be finished today. One visit per CAR per report - submit a new report for the next visit.</span></label>";
+  }
   function fuMode() { var s = g("sdesc"); return !!(s && /follow/i.test(s.value || "")); }
   function fuDone(f) { return !!(f && f.status && f.observation); }
   function fuOkObs(c) { var t = CAR_TREE[c.pestType]; return t && t.ok ? t.ok : "Clear - no fault found"; }
@@ -330,8 +346,8 @@
         "<b style=\"font-size:13px;color:#1a5c38\">Follow-up visit - open CARs</b>" +
         "<span id=\"st-count\" style=\"font-weight:bold;padding:2px 8px;border-radius:10px;background:" + (nf ? "#cfe8d4;color:#1a5c38" : "#fff3cd;color:#7a5600") + "\">" + nf + " followed up</span></div>" +
         "<div style=\"color:#555;margin:4px 0 6px\">This is a follow-up, so the devices are not listed. Choose the CAR(s) you are following up today - tap it below, or pick it from the CAR box in section 4 (cockroaches: the CAR box in section 3) - and complete its follow-up sheet.</div>" +
-        (oc0.length ? "" : "<div style=\"color:#b00020\">This customer has no open CARs.</div>") + fuRows(oc0, true);
-      p.innerHTML = h; bindFuRows(p); setArpt();
+        trialBox() + (oc0.length ? "" : "<div style=\"color:#b00020\">This customer has no open CARs.</div>") + fuRows(oc0, true);
+      p.innerHTML = h; bindFuRows(p); bindTrial(p); setArpt();
       return;
     }
     h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
@@ -366,7 +382,7 @@
       });
     }
     var oc = openCars();
-    if (oc.length) h += "<div style=\"margin-top:10px;font-weight:bold;color:#b00020\">Open CARs - follow-ups</div>" + fuRows(oc, false);
+    if (oc.length) h += "<div style=\"margin-top:10px;font-weight:bold;color:#b00020\">Open CARs - follow-ups</div>" + trialBox() + fuRows(oc, false);
     p.innerHTML = h;
     g("st-scan").onclick = function () { scanOpen(onCode); };
     g("st-site-car").onclick = function () { carForm(null, {}); };
@@ -380,20 +396,25 @@
     })(rows[i]);
     var ec = p.querySelectorAll(".st-editcar");
     for (var j = 0; j < ec.length; j++) (function (b) { b.onclick = function () { var c = carByLocal(b.getAttribute("data-lid")); if (c) carForm(null, c); }; })(ec[j]);
-    bindFuRows(p);
+    bindFuRows(p); bindTrial(p);
     setArpt();
+  }
+  function bindTrial(p) {
+    var t = p.querySelector(".st-trial");
+    if (t) t.onchange = function () { S.st.trialDates = t.checked; saveState(); render(); };
   }
   // one line per open CAR: when it is planned, and either "Follow up" or what was recorded
   function fuRows(oc, fm) {
     var today = g("svcd") ? g("svcd").value : "", h = "";
     oc.forEach(function (c) {
-      var f = S.st.followUps[c.carNo], due = fuDue(c, today), nx = fuNext(c), vn = (+c.visits || 0) + 1;
+      var f = S.st.followUps[c.carNo], due = fuDue(c, trialOn() ? fuVisitDate(c) : today), nx = fuNext(c), vn = (+c.visits || 0) + 1;
       h += "<div class=\"st-fu\" data-car=\"" + esc(c.carNo) + "\" style=\"border-top:1px solid #dbe9e0;padding:6px 0;display:flex;justify-content:space-between;gap:8px;align-items:flex-start\">" +
         "<div><b>" + esc(c.carNo) + "</b> " + esc(String(c.raised || "").split("-").reverse().join("/")) + (c.deviceId ? " &middot; " + esc(c.deviceId) : "") + " &middot; " + esc(c.observation) +
         "<div style=\"color:#666;font-size:11px\">" + esc(c.correction) + (c.location ? " &middot; " + esc(c.location) : "") + "</div>" +
         "<div class=\"st-fu-when\" style=\"font-size:11px;color:" + (due ? "#b00020" : "#666") + "\">" +
         (FU_SCHEDULED[c.pestType] ? "Follow-up visit No. " + vn + (nx ? (nx.n === "F" ? " (final)" : "") + " planned " + esc(nx.date.split("-").reverse().join("/")) : "")
                                   : "Checked at the next monthly service - visit No. " + vn) +
+        (trialOn() && nx && FU_SCHEDULED[c.pestType] ? " <b style=\"color:#b07a00\">[trial: recorded as " + esc(nx.date.split("-").reverse().join("/")) + "]</b>" : "") +
         (+c.clears ? " &middot; " + (+c.clears) + " clear in a row" : "") +
         (fuDone(f) ? "" : due ? (fm ? " &middot; <b>due</b>" : " &middot; <b>due - record it</b>") : (fm ? "" : " &middot; not due today")) + "</div>" +
         (fuDone(f) ? "<div class=\"st-fu-got\" style=\"font-size:12px;color:#1a5c38;margin-top:2px\">✔ " + esc(f.status) + " - " + esc(f.observation) + (f.action ? " &middot; " + esc(f.action) : "") + "</div>" : "") +
@@ -978,7 +999,7 @@
       var f = S.st.followUps[no], c0 = null;
       ((S.reg.openCars) || []).forEach(function (x) { if (x.carNo === no) c0 = x; });
       if (!c0) return null;
-      return {carNo: no, date: date, visitNo: (+c0.visits || 0) + 1, status: f.status || "", observation: f.observation || "",
+      return {carNo: no, date: fuVisitDate(c0), trial: trialOn() && fuVisitDate(c0) !== date, visitNo: (+c0.visits || 0) + 1, status: f.status || "", observation: f.observation || "",
               action: f.action || "", pestType: c0.pestType || "", deviceId: c0.deviceId || "", carObservation: c0.observation || "",
               raised: c0.raised || ""};
     }).filter(function (x) { return x && x.status && x.observation; });
@@ -1066,7 +1087,8 @@
       sc.followUps.forEach(function (f) {
         line(f.carNo + (f.deviceId ? " (" + f.deviceId + ")" : "") + " raised " + String(f.raised || "").split("-").reverse().join("/") + " - " +
              (f.carObservation || "") + ".  Follow-up visit No. " + (f.visitNo || "") + ": " + (f.observation || "-") +
-             (f.action ? "; correction actioned: " + f.action : "") + ".  Status: " + (f.status || "-"));
+             (f.action ? "; correction actioned: " + f.action : "") + ".  Status: " + (f.status || "-") +
+             (f.trial ? "  [TRIAL - recorded as " + String(f.date || "").split("-").reverse().join("/") + "]" : ""));
       });
     }
     (sc.cars || []).forEach(function (c) {
