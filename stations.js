@@ -441,7 +441,14 @@
                                   : "<span style=\"color:#999;font-size:12px\">Choose what you found first</span>";
       cbWire(box, ".st-f-cor-o");
     }
-    q(".st-f-ob").onchange = function () { f = Object.assign({}, f, {action: ""}); fillCor(); };
+    // "OK" found means the visit is clear - In progress is not offered with it (Larry, 26/11/2026)
+    function fillSt() {
+      var stSel = q(".st-f-st"), isOk = q(".st-f-ob").value === ok, cur = stSel.value;
+      var opts = isOk ? fuOptions(c).filter(function (x) { return x !== "In progress"; }) : fuOptions(c);
+      stSel.innerHTML = (isOk ? "" : "<option value=\"\">Select...</option>") + opts.map(function (o) { return "<option>" + esc(o) + "</option>"; }).join("");
+      stSel.value = opts.indexOf(cur) >= 0 ? cur : (isOk ? "Clear" : "");
+    }
+    q(".st-f-ob").onchange = function () { f = Object.assign({}, f, {action: ""}); fillCor(); fillSt(); };
     q(".st-x").onclick = function () { closeModal(m); };
     if (q(".st-rm")) q(".st-rm").onclick = function () { delete S.st.followUps[c.carNo]; saveState(); closeModal(m); render(); };
     q(".st-save").onclick = function () {
@@ -451,11 +458,12 @@
       if (!ob || ob === "Select...") miss.push("what you found");
       else if (ob !== ok && !cor.length) miss.push("the correction actioned");
       if (FU_STATUS.indexOf(st) < 0) miss.push("the status");
+      else if (ob === ok && st === "In progress") miss.push("a status of Clear (nothing was found)");
       if (miss.length) { q(".st-f-err").textContent = "Still needed: " + miss.join(", ") + "."; return; }
       S.st.followUps[c.carNo] = {observation: ob, action: cor.join(COR_SEP), status: st};
       saveState(); closeModal(m); render();
     };
-    fillCor();
+    fillCor(); if (q(".st-f-ob").value === ok) fillSt();
     m.classList.add("show");
   }
   function sel(cls, opts, val) {
