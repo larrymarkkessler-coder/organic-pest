@@ -126,11 +126,11 @@ textarea{min-height:70px;resize:vertical}
   <div class="card">
     <h2>Customer</h2>
     <div id="res-only" class="two">
-      <div><label>Name <span class="req">*</span></label><input id="f-first" autocomplete="off"></div>
-      <div><label>Surname <span class="req">*</span></label><input id="f-sur" autocomplete="off"></div>
+      <div><label>Name <span class="req">*</span></label><input id="f-first" autocomplete="off" oninput="vatShow()"></div>
+      <div><label>Surname <span class="req">*</span></label><input id="f-sur" autocomplete="off" oninput="vatShow()"></div>
     </div>
     <div id="ong-only" class="hide">
-      <label>Customer legal name <span class="req">*</span></label><input id="f-legal" autocomplete="off" placeholder="As it must appear on the Sage invoice">
+      <label>Customer legal name <span class="req">*</span></label><input id="f-legal" autocomplete="off" oninput="vatShow()" placeholder="As it must appear on the Sage invoice">
       <label>Planner / site name <span class="req">*</span></label><input id="f-planner" autocomplete="off" placeholder="The short name the technician will see">
       <label>Contact person</label><input id="f-contact" autocomplete="off">
       <div class="two">
@@ -142,8 +142,10 @@ textarea{min-height:70px;resize:vertical}
     </div>
     <label>Cell number <span class="req">*</span></label><input id="f-phone" type="tel" placeholder="e.g. 082 123 4567">
     <label>Address <span class="req">*</span></label><textarea id="f-addr" placeholder="Street, suburb (estate / unit number)"></textarea>
-    <label>Invoice to</label><input id="f-invto" placeholder="Leave blank to invoice the customer">
+    <label>Invoice to</label><input id="f-invto" placeholder="Leave blank to invoice the customer" oninput="vatShow()">
     <div class="hint">A company or partner name, if Sage should be invoiced under a different name.</div>
+    <div id="vat-box" class="hide"><label>VAT number of the invoice name</label><input id="f-vat" inputmode="numeric" autocomplete="off" placeholder="e.g. 4820137026 - leave blank if not VAT registered">
+    <div class="hint">Goes on the booking with the invoice name, for the Sage invoice.</div></div>
   </div>
 
   <div class="card">
@@ -346,7 +348,15 @@ function setKind(k){
   g("k-res").classList.toggle("on",kind==="res");g("k-ong").classList.toggle("on",kind==="ongoing");
   g("res-only").classList.toggle("hide",kind!=="res");g("ong-only").classList.toggle("hide",kind!=="ongoing");
   g("k-hint").classList.toggle("hide",kind!=="ongoing");g("treat-req").classList.toggle("hide",kind==="ongoing");
-  g("m-book").innerHTML="";
+  g("m-book").innerHTML="";vatShow();
+}
+// A different invoice name opens a VAT number box (Larry, 27/11/2026). The number
+// travels inside Invoice To - "Name (VAT 4820137026)" - so the register, the office
+// emails and SPDev carry it with no Apps Script change.
+function invName(){return kind==="ongoing"?g("f-legal").value.trim():(g("f-first").value.trim()+" "+g("f-sur").value.trim()).trim();}
+function vatShow(){
+  var t=g("f-invto").value.trim(),on=!!t&&t.toLowerCase()!==invName().toLowerCase();
+  g("vat-box").classList.toggle("hide",!on);if(!on)g("f-vat").value="";
 }
 function newRef(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 var clientRef=newRef();
@@ -379,6 +389,9 @@ function book(){
       :[["firstName","Name"],["surname","Surname"],["phone","Cell number"],["address","Address"],["treatment","Treatment"]])
    .concat([["date","Date"],["time","Time"],["techKey","Technician"],["bookedBy","Booked by"]]).forEach(function(f){if(!d[f[0]])miss.push(f[1]);});
   if(miss.length){m.innerHTML="<div class='msg err'>Please fill in: "+miss.join(", ")+"</div>";return;}
+  var vat=g("vat-box").classList.contains("hide")?"":g("f-vat").value.replace(/\s/g,"");
+  if(vat&&!/^4\d{9}$/.test(vat)){m.innerHTML="<div class='msg err'>A South African VAT number is 10 digits starting with 4 - check it, or leave it blank.</div>";return;}
+  if(vat&&d.invoiceTo.indexOf(vat)<0)d.invoiceTo+=" (VAT "+vat+")";
   var who=ong?d.plannerName:(d.firstName+" "+d.surname), what=d.treatment||"First visit";
   var title=ong?"New customer, first visit":"New residential job";
   if(!plannerOk){m.innerHTML="<div class='msg err'>The planner has not loaded yet - wait a moment and try again.</div>";return;}
@@ -424,7 +437,7 @@ function book(){
   }).then(function(){b.disabled=false;b.textContent="Book job";});
 }
 function resetForm(){
-  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time","f-legal","f-planner","f-contact","f-zone","f-rname","f-remail"].forEach(function(id){g(id).value="";});
+  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time","f-legal","f-planner","f-contact","f-zone","f-rname","f-remail","f-vat"].forEach(function(id){g(id).value="";});vatShow();
   g("f-freq").value="Monthly";
   var tc=document.querySelectorAll("#f-treat input");for(var i=0;i<tc.length;i++)tc[i].checked=false;
   g("f-tech").value="";g("m-book").innerHTML="";g("b-book").classList.remove("hide");
