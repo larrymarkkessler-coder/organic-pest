@@ -203,7 +203,8 @@
     st.customer = custName();
     S.st = st;
     // photos come back from the phone's photo store
-    var want = st.cars.map(function (c) { return c.photoId; }).filter(function (x) { return x && !S.photos[x]; });
+    var want = st.cars.map(function (c) { return c.photoId; }).concat(Object.keys(st.followUps || {}).map(function (k) { return (st.followUps[k] || {}).photoId; }))
+      .filter(function (x) { return x && !S.photos[x]; });
     if (want.length && window.photoAll) window.photoAll(function (all) {
       all.forEach(function (r) { if (want.indexOf(r.id) >= 0) S.photos[r.id] = r.data; });
       render();
@@ -445,6 +446,10 @@
       fld("What you found at this follow-up", sel("st-f-ob", ["Select...", ok].concat(pest ? Object.keys(pest.obs) : []), f.observation)) +
       fld("Correction actioned <span style=\"font-weight:normal;color:#666\">(tick all that apply)</span>", "<div class=\"st-f-cor\" style=\"border:1px solid #ccc;border-radius:4px;padding:4px 6px;background:#fff\"></div>") +
       fld("Status", sel("st-f-st", ["Select..."].concat(fuOptions(c)), f.status)) +
+      fld("Photo of the equipment after this follow-up <span style=\"color:#b00020\">(required)</span>", "<div style=\"display:flex;gap:6px;align-items:center;flex-wrap:wrap\">" +
+        "<button type=\"button\" class=\"st-f-cam\" style=\"background:#1a5c38;color:#fff;border:none;border-radius:4px;padding:6px 10px;font-weight:bold\">📷 Take photo</button>" +
+        "<button type=\"button\" class=\"st-f-pick\" style=\"background:none;border:1px solid #1a5c38;color:#1a5c38;border-radius:4px;padding:5px 9px;font-weight:bold\">🗂 Saved photos</button>" +
+        "<input type=\"file\" accept=\"image/*\" capture=\"environment\" class=\"st-f-file\" style=\"display:none\"><span class=\"st-f-th\"></span></div>") +
       "<div style=\"font-size:11px;color:#666;margin:-4px 0 6px\">" + (FU_SCHEDULED[c.pestType]
         ? "Clear three visits in a row to finish this CAR" + (c.pestType === "Rodents" ? " (rodents then get one final visit)" : "") + ". In progress: this visit is logged on this CAR and more visits are added after the last one booked."
         : "Choose Concluded (or Clear) once the fault is sorted out; In progress keeps it open for the next service.") + "</div>" +
@@ -470,6 +475,22 @@
       stSel.value = opts.indexOf(cur) >= 0 ? cur : (isOk ? "Clear" : "");
     }
     q(".st-f-ob").onchange = function () { f = Object.assign({}, f, {action: ""}); fillCor(); fillSt(); };
+    var photoId = f.photoId || "";
+    function fThumb() {
+      var t = q(".st-f-th"), data = photoId ? S.photos[photoId] : "";
+      t.innerHTML = data ? "<img src=\"" + data + "\" style=\"height:52px;border:1px solid #b9d6c2;border-radius:3px;vertical-align:middle\"> <span style=\"font-size:11px;color:#1a5c38\">✔ photo</span>" : "";
+    }
+    function fGot(rec) { if (!rec) return; S.photos[rec.id] = rec.data; photoId = rec.id; fThumb(); }
+    q(".st-f-cam").onclick = function () {
+      if (window.camOpen) { window.camOpen(function (rec) { fGot(rec); }, function () { if (window.photoFixRequest) window.photoFixRequest(); q(".st-f-file").click(); }); toTop("cam-modal"); }
+      else q(".st-f-file").click();
+    };
+    q(".st-f-pick").onclick = function () { if (window.photoPicker) { window.photoPicker(function (rec) { fGot(rec); var pm = g("photo-pick"); if (pm) pm.classList.remove("show"); }); toTop("photo-pick"); } };
+    q(".st-f-file").onchange = function () {
+      var fl = this.files && this.files[0];
+      if (fl && window.shrinkImage) window.shrinkImage(fl, function (rec) { fGot(rec); });
+      this.value = "";
+    };
     q(".st-x").onclick = function () { closeModal(m); };
     if (q(".st-rm")) q(".st-rm").onclick = function () { delete S.st.followUps[c.carNo]; saveState(); closeModal(m); render(); };
     q(".st-save").onclick = function () {
@@ -480,11 +501,12 @@
       else if (ob !== ok && !cor.length) miss.push("the correction actioned");
       if (FU_STATUS.indexOf(st) < 0) miss.push("the status");
       else if (ob === ok && st === "In progress") miss.push("a status of Clear (nothing was found)");
+      if (!photoId || !S.photos[photoId]) miss.push("a photo of the equipment after the follow-up");
       if (miss.length) { q(".st-f-err").textContent = "Still needed: " + miss.join(", ") + "."; return; }
-      S.st.followUps[c.carNo] = {observation: ob, action: cor.join(COR_SEP), status: st};
+      S.st.followUps[c.carNo] = {observation: ob, action: cor.join(COR_SEP), status: st, photoId: photoId};
       saveState(); closeModal(m); render();
     };
-    fillCor(); if (q(".st-f-ob").value === ok) fillSt();
+    fillCor(); if (q(".st-f-ob").value === ok) fillSt(); fThumb();
     m.classList.add("show");
   }
   function sel(cls, opts, val) {
@@ -959,13 +981,21 @@
   }
 
   // ── what index.html asks for ──
+  function fuPhotoErrors() {
+    var out = [];
+    openCars().forEach(function (c) {
+      var f = S.st.followUps[c.carNo];
+      if (fuDone(f) && (!f.photoId || !S.photos[f.photoId])) out.push("Follow-up of " + c.carNo + " has no photo - open it and take the photo.");
+    });
+    return out;
+  }
   function errors() {
     if (!active()) return [];
     if (fuMode()) {
       var oc = openCars(), got = oc.filter(function (c) { return fuDone(S.st.followUps[c.carNo]); });
       var fo = [];
       if (oc.length && !got.length) fo.push("Follow-up visit: choose the CAR(s) you followed up (section 4) and complete the follow-up sheet.");
-      return fo.concat(quoteErrors());
+      return fo.concat(fuPhotoErrors(), quoteErrors());
     }
     if (!devicesServiced()) return [];
     var out = [], left = S.reg.devices.filter(function (d) { return !done(d); });
@@ -978,7 +1008,7 @@
       if (fuDue(c, day) && !fuDone(f))
         out.push("Follow-up of " + c.carNo + (c.deviceId ? " (device " + c.deviceId + ")" : "") + " is due: tap Follow up and complete its sheet.");
     });
-    return out.concat(quoteErrors());
+    return out.concat(fuPhotoErrors(), quoteErrors());
   }
   function payload() {
     if (!active()) return null;
@@ -1001,7 +1031,7 @@
       if (!c0) return null;
       return {carNo: no, date: fuVisitDate(c0), trial: trialOn() && fuVisitDate(c0) !== date, visitNo: (+c0.visits || 0) + 1, status: f.status || "", observation: f.observation || "",
               action: f.action || "", pestType: c0.pestType || "", deviceId: c0.deviceId || "", carObservation: c0.observation || "",
-              raised: c0.raised || ""};
+              raised: c0.raised || "", location: c0.location || "", photoId: f.photoId || "", photo: S.photos[f.photoId] || ""};
     }).filter(function (x) { return x && x.status && x.observation; });
     var fm = fuMode();
     return {siteCode: S.reg.siteCode, onSite: S.reg.devices.length, followUpVisit: fm,
@@ -1015,11 +1045,13 @@
     if (!d || !d.stationCheck || !Array.isArray(d.stationCheck.cars)) return d;
     var c = JSON.parse(JSON.stringify(d));
     c.stationCheck.cars.forEach(function (x) { if (x.photoId) x.photo = ""; });
+    (c.stationCheck.followUps || []).forEach(function (x) { if (x.photoId) x.photo = ""; });
     return c;
   }
   function fill(d, cb) {
     var cars = d && d.stationCheck && Array.isArray(d.stationCheck.cars) ? d.stationCheck.cars : [];
-    var want = cars.filter(function (x) { return x.photoId && !x.photo; });
+    var fus = d && d.stationCheck && Array.isArray(d.stationCheck.followUps) ? d.stationCheck.followUps : [];
+    var want = cars.concat(fus).filter(function (x) { return x.photoId && !x.photo; });
     if (!want.length || !window.photoAll) { cb(d); return; }
     var called = false, t = setTimeout(function () { if (!called) { called = true; cb(d); } }, 6000);
     window.photoAll(function (all) {
@@ -1031,7 +1063,8 @@
   }
   function onSaved(d) {
     try {
-      var ids = S.st ? S.st.cars.map(function (c) { return c.photoId; }).filter(function (x) { return x; }) : [];
+      var ids = S.st ? S.st.cars.map(function (c) { return c.photoId; }).concat(Object.keys(S.st.followUps).map(function (k) { return (S.st.followUps[k] || {}).photoId; }))
+        .filter(function (x) { return x; }) : [];
       if (ids.length && window.photoMarkUsed) window.photoMarkUsed(ids, d.reportNo);
     } catch (e) {}
     lsDel(LS_STATE + (d && d.reportNo));
@@ -1046,6 +1079,16 @@
       doc.setFillColor(G[0], G[1], G[2]); doc.rect(M, y, CW, 6, "F");
       doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("helvetica", "bold");
       doc.text(t, M + 2, y + 4.2); y += 9; doc.setTextColor(30, 30, 30);
+    }
+    // keep the photo's own shape (a portrait phone photo was squashed into 4:3 - trial 26/11/2026)
+    function pdfPhoto(src) {
+      y += 2;
+      var maxW = CW * 0.7, maxH = Math.max(40, H - y - 30), ratio = 0.75;
+      try { var ip = doc.getImageProperties(src); if (ip && ip.width && ip.height) ratio = ip.height / ip.width; } catch (e) {}
+      var pw = maxW, ph = pw * ratio;
+      if (ph > maxH) { ph = maxH; pw = ph / ratio; }
+      try { doc.addImage(src, "JPEG", M, y, pw, ph, undefined, "FAST"); } catch (e) {}
+      doc.setDrawColor(221, 221, 216); doc.rect(M, y, pw, ph); y += ph + 4;
     }
     function line(t, bold, size) {
       doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size || 8);
@@ -1090,6 +1133,19 @@
              (f.action ? "; correction actioned: " + f.action : "") + ".  Status: " + (f.status || "-") +
              (f.trial ? "  [TRIAL - recorded as " + String(f.date || "").split("-").reverse().join("/") + "]" : ""));
       });
+      sc.followUps.forEach(function (f) {
+        if (!f.photo) return;
+        head("CAR FOLLOW-UP " + f.carNo + " - VISIT No. " + (f.visitNo || "") + " - " + (data.reportNo || ""));
+        var dd = String(f.date || data.date || "").split("-").reverse().join("/");
+        [["Customer", data.customer], ["Technician", data.techName], ["Date of follow-up", dd + (f.trial ? " (TRIAL)" : "")], ["Service report number", data.reportNo],
+         ["Equipment number", f.deviceId || "-"], ["Location", f.location || "-"], ["Pest type", f.pestType], ["CAR raised for", f.carObservation],
+         ["Found at this follow-up", f.observation], ["Correction actioned", f.action || "-"], ["Status", f.status]].forEach(function (r) {
+          doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text(r[0] + ":", M, y);
+          doc.setFont("helvetica", "normal");
+          var ls = doc.splitTextToSize(String(r[1] || ""), CW - 45); doc.text(ls, M + 45, y); y += Math.max(1, ls.length) * 4.2;
+        });
+        pdfPhoto(f.photo);
+      });
     }
     (sc.cars || []).forEach(function (c) {
       head("CORRECTIVE ACTION REPORT " + (c.carNo || "(number given on sync)") + " - " + (data.reportNo || ""));
@@ -1104,16 +1160,7 @@
         doc.setFont("helvetica", "normal");
         var ls = doc.splitTextToSize(String(f[1] || ""), CW - 45); doc.text(ls, M + 45, y); y += Math.max(1, ls.length) * 4.2;
       });
-      if (c.photo) {
-        y += 2;
-        // keep the photo's own shape (a portrait phone photo was squashed into 4:3 - trial 26/11/2026)
-        var maxW = CW * 0.7, maxH = Math.max(40, H - y - 30), ratio = 0.75;
-        try { var ip = doc.getImageProperties(c.photo); if (ip && ip.width && ip.height) ratio = ip.height / ip.width; } catch (e) {}
-        var pw = maxW, ph = pw * ratio;
-        if (ph > maxH) { ph = maxH; pw = ph / ratio; }
-        try { doc.addImage(c.photo, "JPEG", M, y, pw, ph, undefined, "FAST"); } catch (e) {}
-        doc.setDrawColor(221, 221, 216); doc.rect(M, y, pw, ph); y += ph + 4;
-      }
+      if (c.photo) pdfPhoto(c.photo);
       y = Math.max(y, H - 24);
       doc.setFont("helvetica", "normal"); doc.setFontSize(8);
       doc.text("Customer - checked by: " + (data.custConfirm || "") + "        Signature: " + (data.signatureData && data.signatureData !== "UNSIGNED" ? "signed on the service report" : "") + "        Date: " + dd, M, y);
