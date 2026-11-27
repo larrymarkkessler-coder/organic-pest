@@ -3376,6 +3376,17 @@ function doSubmit(){
   }catch(e){btn.textContent="Retry";btn.disabled=false;g("svst").className="svst er";g("svst").textContent="Error: "+e.message;}
 }
 
+/* A Follow Up is always a once-off visit (Larry, 27/11/2026): the frequency is set to Once Off and
+   greyed out. Changing the description away from Follow Up opens it again, empty, to choose. */
+function sfreqSync(){
+  var d=g("sdesc"),f=g("sfreq");if(!d||!f)return;
+  if(d.value==="Follow Up"){
+    if(f.value!=="Once Off")f.value="Once Off";
+    f.disabled=true;f.style.background="#eee";f.dataset.fuLock="1";
+  }else if(f.dataset.fuLock){
+    f.disabled=false;f.style.background="";delete f.dataset.fuLock;f.value="";
+  }
+}
 function newRpt(){
   draftClear();_draftOff=false;      // a fresh report: the draft starts again
   selC=null;sigD=null;drw=false;hMk=false;
@@ -3384,7 +3395,7 @@ function newRpt(){
   if(g("site-row"))g("site-row").style.display="none";
   if(g("plan-sel"))g("plan-sel").selectedIndex=0;
   if(g("site-sel"))g("site-sel").innerHTML="<option value=\"\">-- Select site / premises --</option>";
-  g("cs").value="";g("sdesc").value="";g("sfreq").value="";g("fusel").value="";
+  g("cs").value="";g("sdesc").value="";g("sfreq").value="";g("fusel").value="";sfreqSync();
   // Restore tech lock after clearing; otherwise clear the selector
   if(window.TECH_LOCK){
     var pcoRegNew="";for(var kk in TKEYS_MAP){if(TKEYS_MAP[kk]===window.TECH_LOCK){pcoRegNew=kk;break;}}
@@ -5657,6 +5668,8 @@ g("cs").addEventListener("change",function(){
   });
   initSig();areaCnt=0;addArea();rfRpts();rfPending();setTimeout(function(){addILTRow();},100);
   setTimeout(draftRestore,400);      // after the first light-trap row exists
+  if(g("sdesc"))g("sdesc").addEventListener("change",sfreqSync);
+  setTimeout(sfreqSync,1500);        // a restored Follow Up draft locks its frequency too
   setTimeout(syncFromSheets,1500);
   setTimeout(function(){buildTechFilters();loadPlannerFromSheets();},2000);
   setTimeout(loadResidentialCustomers,2500);
@@ -5680,4 +5693,4 @@ g("cs").addEventListener("change",function(){
 }
 window.addEventListener("load",init);
 
-</script><script src="stations.js?v=11"></script></body></html>
+</script><script src="stations.js?v=12"></script></body></html>

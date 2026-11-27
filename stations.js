@@ -62,7 +62,12 @@
   // service. The office books the visits on the planner; the technician records each one here.
   var FU_STATUS = ["In progress", "Clear", "Concluded"];
   var FU_SCHEDULED = {"Cockroaches": 1, "Rodents": 1};
-  function fuOptions(c) { return FU_SCHEDULED[c.pestType] ? ["In progress", "Clear"] : FU_STATUS; }
+  // "Concluded" is offered on every CAR (Larry, 27/11/2026): a blocked, mouldy, damaged or missing
+  // station put right quickly by the customer can be closed at the first follow-up, before the ruled
+  // number of visits. Shown as "Conclude and Close the CAR"; the remaining booked visits are removed.
+  function fuOptions(c) { return FU_STATUS; }
+  var FU_LABEL = {"Concluded": "Conclude and Close the CAR"};
+  function fuLabel(s) { return FU_LABEL[s] || s; }
   function fuPlan(c) {                    // "1:2026-11-30;2:2026-12-02;F:2026-12-17" -> [{n, date}]
     return String(c.plan || "").split(";").map(function (x) { var m = /^(\w+):(\d{4}-\d\d-\d\d)$/.exec(x.trim()); return m ? {n: m[1], date: m[2]} : null; })
       .filter(function (x) { return x; });
@@ -452,8 +457,8 @@
         "<button type=\"button\" class=\"st-f-pick\" style=\"background:none;border:1px solid #1a5c38;color:#1a5c38;border-radius:4px;padding:5px 9px;font-weight:bold\">🗂 Saved photos</button>" +
         "<input type=\"file\" accept=\"image/*\" capture=\"environment\" class=\"st-f-file\" style=\"display:none\"><span class=\"st-f-th\"></span></div>") +
       "<div style=\"font-size:11px;color:#666;margin:-4px 0 6px\">" + (FU_SCHEDULED[c.pestType]
-        ? "Clear three visits in a row to finish this CAR" + (c.pestType === "Rodents" ? " (rodents then get one final visit)" : "") + ". In progress: this visit is logged on this CAR and more visits are added after the last one booked."
-        : "Choose Concluded (or Clear) once the fault is sorted out; In progress keeps it open for the next service.") + "</div>" +
+        ? "Clear three visits in a row to finish this CAR" + (c.pestType === "Rodents" ? " (rodents then get one final visit)" : "") + ". In progress: this visit is logged on this CAR and more visits are added after the last one booked. Conclude and Close the CAR: the fault is sorted out now - the CAR is closed and its remaining follow-up visits are taken off the planner."
+        : "Choose Conclude and Close the CAR (or Clear) once the fault is sorted out; In progress keeps it open for the next service.") + "</div>" +
       "<div class=\"st-f-err\" style=\"color:#b00020;font-size:12px;min-height:14px\"></div>" +
       "<div class=\"modal-btns\" style=\"flex-wrap:wrap\"><button class=\"modal-btn cancel st-x\">Cancel</button>" +
       (fuDone(f) ? "<button class=\"modal-btn cancel st-rm\" style=\"color:#b00020\">Not followed up today</button>" : "") +
@@ -472,7 +477,7 @@
     function fillSt() {
       var stSel = q(".st-f-st"), isOk = q(".st-f-ob").value === ok, cur = stSel.value;
       var opts = isOk ? fuOptions(c).filter(function (x) { return x !== "In progress"; }) : fuOptions(c);
-      stSel.innerHTML = (isOk ? "" : "<option value=\"\">Select...</option>") + opts.map(function (o) { return "<option>" + esc(o) + "</option>"; }).join("");
+      stSel.innerHTML = (isOk ? "" : "<option value=\"\">Select...</option>") + opts.map(function (o) { return "<option value=\"" + esc(o) + "\">" + esc(fuLabel(o)) + "</option>"; }).join("");
       stSel.value = opts.indexOf(cur) >= 0 ? cur : (isOk ? "Clear" : "");
     }
     q(".st-f-ob").onchange = function () { f = Object.assign({}, f, {action: ""}); fillCor(); fillSt(); };
@@ -507,7 +512,7 @@
       S.st.followUps[c.carNo] = {observation: ob, action: cor.join(COR_SEP), status: st, photoId: photoId};
       saveState(); closeModal(m); render();
     };
-    fillCor(); if (q(".st-f-ob").value === ok) fillSt(); fThumb();
+    fillCor(); fillSt(); fThumb();
     m.classList.add("show");
   }
   function sel(cls, opts, val) {
