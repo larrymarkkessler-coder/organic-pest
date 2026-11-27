@@ -82,6 +82,12 @@ textarea{min-height:70px;resize:vertical}
 .chk label:has(input:checked){border-color:var(--g);background:var(--lt);color:var(--g);font-weight:bold}
 .chk input{width:20px;height:20px;margin:0;padding:0;flex:none;accent-color:var(--g)}
 .hide{display:none}
+/* Quote lines and the WhatsApp steps (27/11/2026) */
+.ql{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;font-size:14px;padding:8px 10px;border:1px solid #c9d6ce;border-radius:6px;margin-top:6px;background:#fff}
+.ql button{border:0;background:none;color:var(--red);font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+.qtot{display:flex;justify-content:space-between;font-weight:bold;font-size:15px;margin-top:8px}
+.btn.wa.done{background:#fff;color:#128c4a;border:2px solid #25d366}
+.step{font-size:13px;font-weight:bold;color:var(--g);margin-top:14px}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .seg button{padding:12px;border:1px solid #c9d6ce;border-radius:6px;background:#fff;font-size:15px;color:var(--tx);cursor:pointer}
 .seg button.on{background:var(--g);border-color:var(--g);color:#fff;font-weight:bold}
@@ -110,7 +116,6 @@ textarea{min-height:70px;resize:vertical}
 <header><h1>Job Booking</h1><div>Organic Pest Prevention Services</div></header>
 <nav>
   <button id="t-new" class="on" onclick="tab('new')">New booking</button>
-  <button id="t-inv" onclick="tab('inv')">Awaiting invoice<span id="c-inv" class="cnt hide">0</span></button>
   <button id="t-all" onclick="tab('all')">All bookings</button>
 </nav>
 <main>
@@ -140,7 +145,8 @@ textarea{min-height:70px;resize:vertical}
       <label>Service report to (name)</label><input id="f-rname" autocomplete="off">
       <label>Service report email(s)</label><input id="f-remail" type="email" multiple autocomplete="off" placeholder="Separate several with a comma">
     </div>
-    <label>Cell number <span class="req">*</span></label><input id="f-phone" type="tel" placeholder="e.g. 082 123 4567">
+    <label>Customer cell number <span class="req">*</span></label><input id="f-phone" type="tel" placeholder="e.g. 082 123 4567">
+    <label>Customer email</label><input id="f-email" type="email" autocomplete="off" placeholder="e.g. name@example.com">
     <label>Address <span class="req">*</span></label><textarea id="f-addr" placeholder="Street, suburb (estate / unit number)"></textarea>
     <label>Invoice to</label><input id="f-invto" placeholder="Leave blank to invoice the customer" oninput="vatShow()">
     <div class="hint">A company or partner name, if Sage should be invoiced under a different name.</div>
@@ -176,6 +182,23 @@ textarea{min-height:70px;resize:vertical}
     <select id="f-tech"><option value="">-- Select technician --</option></select>
     <div id="month"></div>
     <div id="day" class="day hint">Pick a date to see each technician's day.</div>
+    <!-- Quoted amount (Larry, 27/11/2026): what the customer was quoted, line by
+         line. A service charge is one amount; a product line is quantity x price
+         per unit. Saved as text on the booking (Quote) with the total (Quote Total). -->
+    <label>Quoted amount</label>
+    <div class="two">
+      <div><select id="q-type" onchange="qType()"><option value="">-- Add a line --</option><option>Service charge</option><option>Bait stations</option><option>Glueboards</option><option>Insect light trap</option></select></div>
+      <div id="q-amt-box" class="hide"><input id="q-amt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount (R)"></div>
+    </div>
+    <div id="q-unit-box" class="two hide">
+      <div><input id="q-qty" type="number" inputmode="numeric" min="1" step="1" placeholder="Quantity"></div>
+      <div><input id="q-price" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Price per unit (R)"></div>
+    </div>
+    <button id="q-add" type="button" class="btn sm sec hide" onclick="qAdd()">Add to quote</button>
+    <div id="q-list"></div>
+    <div class="hint">The amounts as quoted to the customer.</div>
+    <label>Payment method</label>
+    <select id="f-pay"><option value="">-- Select payment method --</option><option>Cash</option><option>Credit Card</option><option>EFT</option></select>
     <label>Notes for the technician</label>
     <textarea id="f-notes" placeholder="e.g. Estate gate PIN 4471, ask for Mrs Smith at the guardhouse; dog in the yard"></textarea>
   </div>
@@ -189,7 +212,6 @@ textarea{min-height:70px;resize:vertical}
   </div>
 </section>
 
-<section id="p-inv" class="hide"><div id="l-inv"><div class="empty">Loading...</div></div></section>
 <section id="p-all" class="hide">
   <input id="q" placeholder="Search name, address, RES number..." oninput="renderAll()" style="margin-bottom:12px">
   <div id="l-all"><div class="empty">Loading...</div></div>
@@ -226,7 +248,7 @@ function post(payload){
   return fetch(GAS_URL,{method:"POST",body:fd}).then(function(r){return r.json();});
 }
 function tab(t){
-  ["new","inv","all"].forEach(function(x){g("p-"+x).classList.toggle("hide",x!==t);g("t-"+x).classList.toggle("on",x===t);});
+  ["new","all"].forEach(function(x){g("p-"+x).classList.toggle("hide",x!==t);g("t-"+x).classList.toggle("on",x===t);});
   if(t!=="new")loadBookings();
 }
 
@@ -242,8 +264,8 @@ function loadTimes(){
 }
 function loadBookings(){
   return fetch(GAS_URL+"?action=getResidential&t="+Date.now()).then(function(r){return r.json();})
-    .then(function(d){bookings=(d&&d.bookings)||[];renderInv();renderAll();})
-    .catch(function(){g("l-inv").innerHTML=g("l-all").innerHTML="<div class='msg err'>Could not load bookings.</div>";});
+    .then(function(d){bookings=(d&&d.bookings)||[];renderAll();})
+    .catch(function(){g("l-all").innerHTML="<div class='msg err'>Could not load bookings.</div>";});
 }
 
 // ── the technician's day ──────────────────────────────────────────────
@@ -358,6 +380,32 @@ function vatShow(){
   var t=g("f-invto").value.trim(),on=!!t&&t.toLowerCase()!==invName().toLowerCase();
   g("vat-box").classList.toggle("hide",!on);if(!on)g("f-vat").value="";
 }
+var quote=[];
+function rands(n){return "R"+Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+function qType(){
+  var t=g("q-type").value;
+  g("q-amt-box").classList.toggle("hide",t!=="Service charge");
+  g("q-unit-box").classList.toggle("hide",!t||t==="Service charge");
+  g("q-add").classList.toggle("hide",!t);
+}
+function qAdd(){
+  var t=g("q-type").value;if(!t)return;
+  var line;
+  if(t==="Service charge"){var a=parseFloat(g("q-amt").value);
+    if(!(a>0)){alert("Enter the service charge amount.");return;}
+    line={item:t,qty:1,price:a,total:a};}
+  else{var q=parseInt(g("q-qty").value,10),pr=parseFloat(g("q-price").value);
+    if(!(q>0)||g("q-price").value===""||!(pr>=0)){alert("Enter the quantity and the price per unit.");return;}
+    line={item:t,qty:q,price:pr,total:Math.round(q*pr*100)/100};}
+  quote.push(line);["q-amt","q-qty","q-price"].forEach(function(id){g(id).value="";});g("q-type").value="";qType();qRender();
+}
+function qDel(i){quote.splice(i,1);qRender();}
+function qLine(l){return l.item==="Service charge"?l.item+" "+rands(l.total):l.item+" "+l.qty+" x "+rands(l.price)+" = "+rands(l.total);}
+function qTotal(){return Math.round(quote.reduce(function(t,l){return t+l.total;},0)*100)/100;}
+function qRender(){
+  g("q-list").innerHTML=quote.map(function(l,i){return "<div class='ql'><span>"+esc(qLine(l))+"</span><button type='button' aria-label='Remove' onclick='qDel("+i+")'>&times;</button></div>";}).join("")+
+    (quote.length?"<div class='qtot'><span>Total quoted</span><span>"+rands(qTotal())+"</span></div>":"");
+}
 function newRef(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 var clientRef=newRef();
 function treatments(){
@@ -375,7 +423,9 @@ function book(){
     phone:g("f-phone").value.trim(), address:g("f-addr").value.trim(),
     invoiceTo:g("f-invto").value.trim(), treatment:treatments(),
     date:g("f-date").value, time:g("f-time").value, techKey:key,
-    techName:key?techName(key):"", techNotes:g("f-notes").value.trim()};
+    techName:key?techName(key):"", techNotes:g("f-notes").value.trim(),
+    email:g("f-email").value.trim(), payment:g("f-pay").value,
+    quote:quote.map(qLine).join("; "), quoteTotal:quote.length?qTotal().toFixed(2):""};
   var ong=kind==="ongoing",miss=[],m=g("m-book");
   if(ong){
     d.type="ongoing";d.firstName=g("f-contact").value.trim();d.surname="";
@@ -389,6 +439,9 @@ function book(){
       :[["firstName","Name"],["surname","Surname"],["phone","Cell number"],["address","Address"],["treatment","Treatment"]])
    .concat([["date","Date"],["time","Time"],["techKey","Technician"],["bookedBy","Booked by"]]).forEach(function(f){if(!d[f[0]])miss.push(f[1]);});
   if(miss.length){m.innerHTML="<div class='msg err'>Please fill in: "+miss.join(", ")+"</div>";return;}
+  if(d.email&&!d.email.split(/[;,]/).every(function(x){return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.trim());})){
+    m.innerHTML="<div class='msg err'>Check the customer email address.</div>";return;}
+  if(g("q-type").value){m.innerHTML="<div class='msg err'>Press Add to quote for the "+esc(g("q-type").value)+" line, or clear it.</div>";return;}
   var vat=g("vat-box").classList.contains("hide")?"":g("f-vat").value.replace(/\s/g,"");
   if(vat&&!/^4\d{9}$/.test(vat)){m.innerHTML="<div class='msg err'>A South African VAT number is 10 digits starting with 4 - check it, or leave it blank.</div>";return;}
   if(vat&&d.invoiceTo.indexOf(vat)<0)d.invoiceTo+=" (VAT "+vat+")";
@@ -407,6 +460,8 @@ function book(){
       "Address: "+d.address+"\n"+
       "Treatment: "+what+"\n"+
       (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
+      (d.quote?"Quoted: "+d.quote+(quote.length>1?" (total "+rands(qTotal())+")":"")+"\n":"")+
+      (d.payment?"Payment: "+d.payment+"\n":"")+
       (ong?"\nIt is on your planner as "+r.customer+". On the report select planner name: "+r.customer+" (customer: "+d.legalName+")"
           :"\nIt is on your planner. On the report select customer: "+r.customer);
     var url="https://wa.me/"+waNumber(t[2])+"?text="+encodeURIComponent(text);
@@ -421,23 +476,39 @@ function book(){
       "Address: "+d.address+"\n"+
       "Treatment: "+what+"\n"+
       (d.techNotes?"Notes: "+d.techNotes+"\n":"")+
+      (d.quote?"Quoted: "+d.quote+(quote.length>1?" (total "+rands(qTotal())+")":"")+"\n":"")+
+      (d.payment?"Payment: "+d.payment+"\n":"")+
       "Booked by: "+d.bookedBy;
     var groupUrl="https://wa.me/?text="+encodeURIComponent(groupText);
     m.innerHTML="<div class='msg ok'><b>Booked "+esc(r.bookingNo)+"</b> - on "+esc(t[1])+"'s planner for "+wd(d.date)+" "+dmy(d.date)+" at "+esc(d.time)+".</div>"+
       (/^FAILED/.test(r.bookingEmail||"")?"<div class='msg err'>The office email did not send: "+esc(r.bookingEmail)+"</div>":"")+
-      "<a class='btn wa' href='"+url+"' target='_blank' rel='noopener'>Send to "+esc(t[1])+" on WhatsApp</a>"+
-      "<a class='btn wa' href='"+groupUrl+"' target='_blank' rel='noopener'>Post to Group</a>"+
-      "<div class='hint'>Opens WhatsApp with the message filled in - pick the "+(ong?"<b>Organic Pest Prevention</b> group (ongoing customer)":"<b>residential</b> group (residential job)")+" and press send.</div>"+
-      "<button class='btn sec' onclick='resetForm()'>New booking</button>";
-    b.classList.add("hide");
+      "<div class='msg warn'><b>Two WhatsApps still to send.</b> Nothing is sent by itself: tap each button, then press send in WhatsApp.</div>"+
+      "<div class='step'>Step 1 of 2</div><a id='wa-tech' class='btn wa' href='"+url+"' target='_blank' rel='noopener' data-done='Sent to "+esc(t[1])+" - tap to send again' onclick='waSent(this)'>Send to "+esc(t[1])+" on WhatsApp</a>"+
+      "<div class='step'>Step 2 of 2</div><a id='wa-group' class='btn wa' href='"+groupUrl+"' target='_blank' rel='noopener' data-done='Posted to the group - tap to post again' onclick='waSent(this)'>Post to Group</a>"+
+      "<div class='hint'>Step 2 opens WhatsApp's chat list with the message filled in - pick the "+(ong?"<b>Organic Pest Prevention</b> group (ongoing customer)":"<b>residential</b> group (residential job)")+" and press send. Your phone must be in that group, and it opens in the WhatsApp set as your phone's default.</div>"+
+      "<button class='btn sec' onclick='newBooking()'>New booking</button>";
+    waLeft=2;
+    b.classList.add("hide");m.scrollIntoView({behavior:"smooth",block:"start"});
     planner.push({date:d.date,techKey:key,techName:d.techName,customer:r.customer,notes:(ong?"New customer ":"Residential ")+r.bookingNo+" | "+d.time,frequency:"Once-off"});
     renderDay();
   }).catch(function(e){
     m.innerHTML="<div class='msg err'>Not booked: "+esc(e.message)+". Check your signal and press Book again - it will not double-book.</div>";
   }).then(function(){b.disabled=false;b.textContent="Book job";});
 }
+// The WhatsApp step (27/11/2026): a web page cannot send a WhatsApp, so each
+// button opens WhatsApp with the message and the booker presses send. A tapped
+// button turns white with a tick; leaving with one untapped asks first.
+var waLeft=0;
+function waSent(a){if(!a.classList.contains("done")){a.classList.add("done");waLeft=Math.max(0,waLeft-1);}a.innerHTML="&#10003; "+esc(a.getAttribute("data-done"));}
+window.addEventListener("beforeunload",function(e){if(waLeft>0){e.preventDefault();e.returnValue="";}});
+function newBooking(){
+  var left=[];if(g("wa-tech")&&!g("wa-tech").classList.contains("done"))left.push("technician");if(g("wa-group")&&!g("wa-group").classList.contains("done"))left.push("group");
+  if(left.length&&!confirm("The "+left.join(" and ")+" WhatsApp for this booking has not been opened yet. Start a new booking anyway?"))return;
+  resetForm();
+}
 function resetForm(){
-  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time","f-legal","f-planner","f-contact","f-zone","f-rname","f-remail","f-vat"].forEach(function(id){g(id).value="";});vatShow();
+  waLeft=0;quote=[];qRender();g("q-type").value="";qType();g("f-pay").value="";
+  ["f-first","f-sur","f-phone","f-addr","f-invto","f-notes","f-time","f-legal","f-planner","f-contact","f-zone","f-rname","f-remail","f-vat","f-email"].forEach(function(id){g(id).value="";});vatShow();
   g("f-freq").value="Monthly";
   var tc=document.querySelectorAll("#f-treat input");for(var i=0;i<tc.length;i++)tc[i].checked=false;
   g("f-tech").value="";g("m-book").innerHTML="";g("b-book").classList.remove("hide");
@@ -445,12 +516,14 @@ function resetForm(){
 }
 
 // ── lists ─────────────────────────────────────────────────────────────
-function card(b,withInvoice){
+function card(b){
   var no=b["Booking No"],hl=Q.get("invoice")===no?" hl":"";
   var h="<div class='card bk"+hl+"' id='bk-"+esc(no)+"'><div class='top'><span>"+esc((b["First Name"]+" "+b["Surname"]).trim())+(b["Type"]==="Ongoing"?"<span class='ty'>New ongoing customer</span>":"")+"</span><span class='st "+esc(b["Status"])+"'>"+esc(b["Status"])+"</span></div>"+
     "<div class='ln'>"+esc(no)+" &middot; "+wd(b["Date"])+" "+dmy(b["Date"])+" "+esc(b["Time"])+" &middot; "+esc(b["Tech Name"])+"</div>"+
     "<div class='ln'>"+esc(b["Treatment"])+" &middot; "+esc(b["Address"])+"</div>"+
-    "<div class='ln'>Invoice to: <b>"+esc(b["Invoice To"])+"</b> &middot; "+esc(b["Phone"])+"</div>"+
+    "<div class='ln'>Invoice to: <b>"+esc(b["Invoice To"])+"</b> &middot; "+esc(b["Phone"])+(b["Customer Email"]?" &middot; "+esc(b["Customer Email"]):"")+"</div>"+
+    (b["Quote"]?"<div class='ln'>Quoted: "+esc(b["Quote"])+(b["Quote Total"]?" &middot; <b>total "+rands(b["Quote Total"])+"</b>":"")+"</div>":"")+
+    (b["Payment Method"]?"<div class='ln'>Payment: "+esc(b["Payment Method"])+"</div>":"")+
     (b["Type"]==="Ongoing"?"<div class='ln'>"+esc(b["Frequency"])+(b["Zone"]?" &middot; "+esc(b["Zone"]):"")+((b["Report Contact"]||b["Report Email"])?" &middot; Report to: "+esc((b["Report Contact"]+" "+b["Report Email"]).trim()):"")+"</div>":"")+
     (b["Report No"]?"<div class='ln'>Report "+esc(b["Report No"])+" ("+dmy(b["Serviced Date"])+")</div>":"")+
     (b["Booking Email"]?"<div class='ln'"+(/^FAILED/.test(b["Booking Email"])?" style='color:#c0392b;font-weight:bold'":"")+">Booking email: "+esc(b["Booking Email"])+"</div>":"")+
@@ -458,37 +531,22 @@ function card(b,withInvoice){
     (b["Invoice No"]?"<div class='ln'>Invoice "+esc(b["Invoice No"])+" - "+esc(b["Invoiced By"])+", "+esc(b["Invoiced At"])+"</div>":"")+
     (b["Cancel Note"]?"<div class='ln'>Cancelled "+esc(b["Cancel Note"])+"</div>":"")+
     "<div class='ln'>Booked by "+esc(b["Booked By"])+", "+esc(b["Booked At"])+"</div>";
-  if(withInvoice&&(b["Status"]==="Serviced"||b["Status"]==="Booked")){
-    h+="<div class='two'><div><label>Sage invoice no.</label><input id='inv-"+esc(no)+"'></div>"+
-       "<div><label>Your name</label><input id='by-"+esc(no)+"' value='"+esc(lsGet("bookedBy2")||(lsGet("bookedBy")!=="OTHER"?lsGet("bookedBy"):""))+"'></div></div>"+
-       "<button class='btn sm' onclick=\"invoiced('"+esc(no)+"')\">Mark invoiced</button>";
-  }
   if(b["Status"]==="Serviced")h+="<button class='btn sm sec' onclick=\"resend('"+esc(no)+"')\">Resend invoice email</button>";
   if(b["Status"]==="Booked")h+="<button class='btn sm red' onclick=\"cancelBk('"+esc(no)+"')\">Cancel booking</button>";
   return h+"<div id='m-"+esc(no)+"'></div></div>";
 }
-function renderInv(){
-  // serviced first (oldest first) - those are owed an invoice now
-  var due=bookings.filter(function(b){return b["Status"]==="Serviced";}).sort(function(a,b){return a["Date"]<b["Date"]?-1:1;});
-  var c=g("c-inv");c.textContent=due.length;c.classList.toggle("hide",!due.length);
-  var focus=Q.get("invoice"),extra=focus?bookings.filter(function(b){return b["Booking No"]===focus&&b["Status"]!=="Serviced";}):[];
-  g("l-inv").innerHTML=(extra.concat(due).map(function(b){return card(b,true);}).join(""))||"<div class='empty'>Nothing waiting to be invoiced.</div>";
-  if(focus){var el=g("bk-"+focus);if(el)el.scrollIntoView({block:"center"});}
-}
+// Jobs awaiting an invoice are on SPDev's dashboard since 27/11/2026 (Larry):
+// the "please invoice" email links there, and the Sage invoice number is
+// recorded there. This page keeps the bookings themselves.
+var SPDEV_URL="https://claude.ai/artifact/WY8BZ6QvDKZKW435nb8Uit";
 function renderAll(){
   var q=g("q").value.toLowerCase();
   var list=bookings.filter(function(b){return !q||JSON.stringify(b).toLowerCase().indexOf(q)>=0;})
     .sort(function(a,b){return a["Booking No"]<b["Booking No"]?1:-1;});
-  g("l-all").innerHTML=list.map(function(b){return card(b,true);}).join("")||"<div class='empty'>No bookings yet.</div>";
-}
-function invoiced(no){
-  var inv=g("inv-"+no).value.trim(),by=g("by-"+no).value.trim(),m=g("m-"+no);
-  if(!inv||!by){m.innerHTML="<div class='msg err'>Enter the Sage invoice number and your name.</div>";return;}
-  m.innerHTML="<div class='msg ok'>Saving...</div>";
-  post({action:"markResidentialInvoiced",bookingNo:no,invoiceNo:inv,by:by}).then(function(r){
-    if(!r||r.status!=="ok")throw new Error((r&&r.message)||"no answer");
-    lsSet("bookedBy2",by);loadBookings();
-  }).catch(function(e){m.innerHTML="<div class='msg err'>"+esc(e.message)+"</div>";});
+  var focus=Q.get("invoice");
+  g("l-all").innerHTML=(focus?"<div class='msg warn'>Jobs awaiting an invoice are now on the <a href='"+SPDEV_URL+"' target='_blank' rel='noopener'>SPDev dashboard</a>; record the Sage invoice number there.</div>":"")+
+    (list.map(function(b){return card(b);}).join("")||"<div class='empty'>No bookings yet.</div>");
+  if(focus){var el=g("bk-"+focus);if(el)el.scrollIntoView({block:"center"});}
 }
 function resend(no){
   var m=g("m-"+no);m.innerHTML="<div class='msg ok'>Sending...</div>";
@@ -518,7 +576,7 @@ function cancelBk(no){
   g("f-by").addEventListener("change",function(){g("f-by2").classList.toggle("hide",this.value!=="OTHER");});
   var lb=lsGet("bookedBy");if(lb){g("f-by").value=lb;if(lb==="OTHER"){g("f-by2").classList.remove("hide");g("f-by2").value=lsGet("bookedBy2");}}
   loadPlanner();loadTimes();loadBookings();
-  if(Q.get("invoice"))tab("inv");
+  if(Q.get("invoice"))tab("all");
 })();
 </script>
 </body>
