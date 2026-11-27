@@ -249,7 +249,7 @@
   function deactivate() {
     S.reg = null; S.st = null;
     var p = g("st-panel"); if (p && p.parentNode) p.parentNode.removeChild(p);
-    unlockOnSite(); clearCarCells(); dropQuoteRows(); fuFieldsFree();
+    unlockOnSite(); clearCarCells(); dropQuoteRows(); fuFieldsFree(); fuLayout();
     ["st-car", "st-fu-modal", "st-res", "st-ns", "st-redo", "st-scan-modal"].forEach(function (id) { var m = g(id); if (m) m.classList.remove("show"); });
   }
 
@@ -346,9 +346,10 @@
       h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
         "<b style=\"font-size:13px;color:#1a5c38\">Follow-up visit - open CARs</b>" +
         "<span id=\"st-count\" style=\"font-weight:bold;padding:2px 8px;border-radius:10px;background:" + (nf ? "#cfe8d4;color:#1a5c38" : "#fff3cd;color:#7a5600") + "\">" + nf + " followed up</span></div>" +
-        "<div style=\"color:#555;margin:4px 0 6px\">This is a follow-up, so the devices are not listed. Choose the CAR(s) you are following up today - tap it below, or pick it from the CAR box in section 4 (cockroaches: the CAR box in section 3) - and complete its follow-up sheet.</div>" +
+        "<div style=\"color:#555;margin:4px 0 6px\">This is a follow-up visit: only this customer's open CARs are shown. Tap <b>Follow up</b> on each CAR you are following up today and complete its sheet, then sign off in section 8.</div>" +
         trialBox() + (oc0.length ? "" : "<div style=\"color:#b00020\">This customer has no open CARs.</div>") + fuRows(oc0, true);
-      p.innerHTML = h; bindFuRows(p); bindTrial(p); setArpt();
+      if (fuQuoteCars().length) h += "<div style=\"margin-top:8px;padding:6px;background:#fff8e1;border:1px solid #e0c060;border-radius:5px;color:#5a4500\">A follow-up was quoted: section 7 (Quotation Requests) has opened below - choose the item to quote. The request goes to the office with this report.</div>";
+      p.innerHTML = h; bindFuRows(p); bindTrial(p); setArpt(); fuLayout();
       return;
     }
     h = "<div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px\">" +
@@ -398,7 +399,7 @@
     var ec = p.querySelectorAll(".st-editcar");
     for (var j = 0; j < ec.length; j++) (function (b) { b.onclick = function () { var c = carByLocal(b.getAttribute("data-lid")); if (c) carForm(null, c); }; })(ec[j]);
     bindFuRows(p); bindTrial(p);
-    setArpt();
+    setArpt(); fuLayout();
   }
   function bindTrial(p) {
     var t = p.querySelector(".st-trial");
@@ -941,11 +942,23 @@
     }
     return null;
   }
+  // A follow-up recorded as quoted ("Quote Sent - ...", "Customer Quoted - ...") gets its section 7
+  // line too, so the quote request reaches the office (Larry, 27/11/2026).
+  function fuQuoteCars() {
+    var out = [];
+    if (!S.st) return out;
+    openCars().forEach(function (c) {
+      var f = S.st.followUps[c.carNo];
+      if (fuDone(f) && corParts(f.action).some(function (x) { return /quot/i.test(x); }))
+        out.push({localId: "fu-" + c.carNo, carNo: c.carNo, deviceId: c.deviceId, location: c.location, pestType: c.pestType, correction: f.action});
+    });
+    return out;
+  }
+  function quoteCars() { return S.st.cars.filter(isQuoteCar).concat(fuQuoteCars()); }
   function syncQuotes() {
     if (!g("quote-body") || !window.addQuoteRow) return;
     var want = {};
-    S.st.cars.forEach(function (c) {
-      if (!isQuoteCar(c)) return;
+    quoteCars().forEach(function (c) {
       want[c.localId] = 1;
       var r = quoteRowFor(c);
       if (!r) {
@@ -971,13 +984,41 @@
   }
   function quoteErrors() {
     var out = [];
-    S.st.cars.forEach(function (c) {
-      if (!isQuoteCar(c)) return;
+    quoteCars().forEach(function (c) {
       var r = quoteRowFor(c), it = r ? r.querySelector(".quote-item") : null;
       if (!it || !it.value || it.value === "Select item")
         out.push("Section 7: choose the item to quote for " + (c.carNo || "the CAR") + (c.deviceId ? " (device " + c.deviceId + ")" : "") + ".");
     });
     return out;
+  }
+
+  // ── follow-up visit screen (Larry, 27/11/2026): on a Follow Up for a register customer the
+  //    technician sees only sections 1, 2, the open CARs (section 4), 5 and 8. Sections 3, 6 and 7
+  //    and the device table are hidden, not cleared - change the service description back and they
+  //    return as they were. Section 7 comes back on its own when a follow-up is quoted. ──
+  function cardOf(id) { var e = g(id); return e && e.closest ? e.closest(".card") : null; }
+  function hideEl(el, hide) {
+    if (!el) return;
+    if (hide) { if (el.dataset.stFuHid !== "1") { el.dataset.stFuHid = "1"; el.style.display = "none"; } }
+    else if (el.dataset.stFuHid === "1") { delete el.dataset.stFuHid; el.style.display = ""; }
+  }
+  function fuLayout() {
+    var on = !!(active() && fuMode());
+    var quoteOn = on && !!document.querySelector("#quote-body tr[data-st-car]");
+    hideEl(cardOf("abody"), on);
+    hideEl(cardOf("rec-body"), on);
+    hideEl(cardOf("quote-body"), on && !quoteOn);
+    var tbl = g("dbody") && g("dbody").closest ? g("dbody").closest("table") : null;
+    hideEl(tbl, on);
+    var tg = g("devices-serviced-toggle"), tl = tg && tg.closest ? tg.closest("label") : null;
+    hideEl(tl, on);
+    // "Pest Devices Serviced? NO" hides the whole section 4 body, which would hide the CAR list too
+    var wrap = g("dbody") && g("dbody").closest ? g("dbody").closest(".cbd") : null;
+    if (on && wrap && wrap.style.display === "none") { wrap.dataset.stFuShown = "1"; wrap.style.display = ""; }
+    if (!on && wrap && wrap.dataset.stFuShown === "1") {
+      delete wrap.dataset.stFuShown;
+      if (tg && window.toggleDevicesServiced) window.toggleDevicesServiced(tg);
+    }
   }
 
   // ── what index.html asks for ──
@@ -1168,7 +1209,7 @@
   }
 
   window.ST = {active: active, errors: errors, payload: payload, onSaved: onSaved, pdfPages: pdfPages, lean: lean, fill: fill, _fuForm: function (no) { var c = carByNo(no); if (c) fuForm(c); },
-               _state: function () { return S; }, _check: check, _refreshSites: refreshSites, _onCode: onCode, CAR_TREE: CAR_TREE};
+               _state: function () { return S; }, _check: check, _refreshSites: refreshSites, _onCode: onCode, _fuLayout: fuLayout, CAR_TREE: CAR_TREE};
 
   // keep only the 15 newest report states on the phone
   function housekeep() {
@@ -1184,8 +1225,8 @@
       refreshSites(false);
       var cs = g("cs"); if (cs) cs.addEventListener("change", function () { refreshSites(false, 120000); setTimeout(check, 50); });
       var ss = g("site-sel"); if (ss) ss.addEventListener("change", function () { setTimeout(check, 50); });
-      var sd = g("sdesc"); if (sd) sd.addEventListener("change", function () { if (active()) render(); });
-      setInterval(function () { try { check(); retryNumbers(); if (active()) fillCarCells(); } catch (e) {} }, 1500);
+      var sd = g("sdesc"); if (sd) sd.addEventListener("change", function () { if (active()) render(); fuLayout(); });
+      setInterval(function () { try { check(); retryNumbers(); if (active()) fillCarCells(); fuLayout(); } catch (e) {} }, 1500);
       check();
     } catch (e) { console.log("stations.js start:", e && e.message); }
   }
