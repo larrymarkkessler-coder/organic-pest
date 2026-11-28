@@ -86,7 +86,9 @@
   // TRIAL ONLY (Larry, 26/11/2026): on the test site each follow-up is recorded as if it was done on its
   // planned date, so the CARs can be taken to their conclusion without waiting. The office applies the
   // normal rules to that date. No other customer ever sees this.
-  var TRIAL_SITES = {"LST-TEST": 1};
+  // Trial ended 28/11/2026 (Larry: "Trial - ok fine"): no site records follow-ups on their planned dates.
+  // Put a site code back here (e.g. {"LST-TEST": 1}) only for a new trial.
+  var TRIAL_SITES = {};
   function trialSite() { return !!(S.reg && TRIAL_SITES[S.reg.siteCode]); }
   function trialOn() { return trialSite() && S.st && S.st.trialDates !== false; }
   function fuVisitDate(c) {
@@ -1214,7 +1216,7 @@
   }
 
   window.ST = {active: active, errors: errors, payload: payload, onSaved: onSaved, pdfPages: pdfPages, lean: lean, fill: fill, _fuForm: function (no) { var c = carByNo(no); if (c) fuForm(c); },
-               _state: function () { return S; }, _check: check, _refreshSites: refreshSites, _onCode: onCode, _fuLayout: fuLayout, CAR_TREE: CAR_TREE};
+               _state: function () { return S; }, _check: check, _refreshSites: refreshSites, _onCode: onCode, _trial: TRIAL_SITES, _fuLayout: fuLayout, CAR_TREE: CAR_TREE};
 
   // keep only the 15 newest report states on the phone
   function housekeep() {
